@@ -10,6 +10,9 @@ import static org.awaitility.Awaitility.await;
 import com.huawei.it.ex.one.application.config.DomainAgentProperties;
 import com.huawei.it.ex.one.application.config.IntentFailureStrategy;
 import com.huawei.it.ex.one.application.config.RouteSignalProperties;
+import com.huawei.it.ex.one.application.integration.agent.AgentRuntime;
+import com.huawei.it.ex.one.application.integration.agent.AgentRuntimeCancelRequest;
+import com.huawei.it.ex.one.application.integration.agent.AgentRuntimeRequest;
 import com.huawei.it.ex.one.application.integration.agent.DomainAgentCancelRequest;
 import com.huawei.it.ex.one.application.integration.agent.DomainAgentClient;
 import com.huawei.it.ex.one.application.integration.agent.DomainAgentRequest;
@@ -24,6 +27,7 @@ import com.huawei.it.ex.one.application.service.routing.RouteSignalFrame;
 import com.huawei.it.ex.one.application.service.routing.RouteSignalRequest;
 import com.huawei.it.ex.one.application.service.routing.RouteSignalResult;
 import com.huawei.it.ex.one.domain.auth.UserContext;
+import com.huawei.it.ex.one.domain.chat.AttachmentRef;
 import com.huawei.it.ex.one.domain.chat.ChatCommand;
 import com.huawei.it.ex.one.domain.chat.ChatEvent;
 import com.huawei.it.ex.one.domain.chat.ChatInteractionRequest;
@@ -51,6 +55,7 @@ import reactor.core.scheduler.Schedulers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -80,6 +85,8 @@ class BeforeIntentRouteSwitchFlowTest extends ChatFlowTestSupport {
     private final List<Map<String, Object>> confirmedMetadata = new CopyOnWriteArrayList<>();
     private boolean serviceIdentity;
     private final List<DomainAgentRequest> agentRequests = new CopyOnWriteArrayList<>();
+    private final List<AgentRuntimeRequest> relayRequests = new CopyOnWriteArrayList<>();
+    private final List<RouteSignalRequest> rerouteRequests = new CopyOnWriteArrayList<>();
     private Boolean recoverable = false;
     private boolean explicitNullRecoverable;
     private boolean automaticSource;
@@ -138,6 +145,7 @@ class BeforeIntentRouteSwitchFlowTest extends ChatFlowTestSupport {
             public Flux<RouteSignalFrame> routeIntentWithProgress(RouteSignalRequest request) {
                 return Flux.defer(() -> {
                     intents.incrementAndGet();
+                    rerouteRequests.add(request);
                     confirmedMetadata.add(request.command().metadata());
                     if (expert != null) {
                         assertThat(request.command().intentExpertScope()).isEqualTo(expert);
@@ -188,7 +196,7 @@ class BeforeIntentRouteSwitchFlowTest extends ChatFlowTestSupport {
             }
         };
         service = financeServiceWithDomainClientAndBindings(sessions, messages, runs, events, routes,
-                agent, noopRuntime(), bindings, properties, liveEventBus(), interactions, runtimeBindingCache(),
+                agent, capturingRelay(), bindings, properties, liveEventBus(), interactions, runtimeBindingCache(),
                 Schedulers.boundedElastic(), documentFacade(), executions, gate);
         Object orchestrator = ReflectionTestUtils.getField(service, "orchestrator");
         ChatRunStopCoordinator stop = (ChatRunStopCoordinator) ReflectionTestUtils.getField(orchestrator, "stopCoordinator");
@@ -687,6 +695,66 @@ class BeforeIntentRouteSwitchFlowTest extends ChatFlowTestSupport {
         assertThat(intents).hasValue(1);
         assertThat(queries).hasValue(1);
         assertThat(interactions.requests.values()).noneMatch(ChatInteractionRequest::waiting);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"EXPERT,true", "EXPERT,false", "DELEGATE,true", "DELEGATE,false", "DOMAIN_AGENT,true", "DOMAIN_AGENT,false"})
+    void attachmentOnlyConfirmationKeepsOriginalTextAndOnlyExplicitDocuments(String target, boolean resend) {
+        List<AttachmentRef> attachments = List.of(new AttachmentRef("doc-1", "forged-name.xlsx", null, null));
+        ChatCommand original = new ChatCommand(null, null, null, null, null, "web", null,
+                attachments, Map.of(), "DOMAIN_AGENT", "agent-a", ChatRunMode.NEXT, null, null, null);
+        assertThat(execute(original).getLast().type()).isEqualTo("run.waiting_user");
+        ChatInteractionRequest first = waiting();
+        assertThat(first.requestPayload()).containsEntry("confirmationStage", "BEFORE_INTENT")
+                .containsEntry("originalQuery", "");
+        assertThat(intents).hasValue(0);
+        result = switch (target) {
+            case "EXPERT" -> RouteSignalResult.of(RouteTarget.domainExpertRuntime(
+                    "intent-agent", 0.95, "expert", "finance-expert", "actual-expert-skill"));
+            case "DELEGATE" -> RouteSignalResult.of(RouteTarget.agentRuntime("delegate"));
+            default -> RouteSignalResult.of(RouteTarget.domainAgent("agent-b", "intent-agent"));
+        };
+        ChatCommand confirm = new ChatCommand(null, null, null, first.sessionId(), null, "web", null,
+                resend ? attachments : List.of(), Map.of(), null, null, ChatRunMode.CONTINUE_INTERACTION,
+                null, null, null, null, first.id(), true, null, Map.of());
+        assertThat(execute(confirm).getLast().type()).isEqualTo("run.completed");
+        assertThat(intents).hasValue(1);
+        assertThat(rerouteRequests).singleElement().satisfies(request -> {
+            assertThat(request.intentQuery()).isEqualTo(resend ? "[用户上传文档] invoice.pdf" : null);
+            assertThat(request.command().message()).isEmpty();
+            assertThat(request.userMessageId()).isEqualTo(first.userMessageId());
+        });
+        if ("DOMAIN_AGENT".equals(target)) {
+            assertThat(relayRequests).isEmpty();
+            assertThat(agentRequests).hasSize(2);
+            assertThat(agentRequests.getLast().query()).isEmpty();
+            assertThat(agentRequests.getLast().documents()).hasSize(resend ? 1 : 0);
+        } else {
+            assertThat(agentRequests).hasSize(1);
+            assertThat(relayRequests).singleElement().satisfies(request -> {
+                assertThat(request.message()).isEmpty();
+                assertThat(request.sessionId()).isEqualTo(first.sessionId());
+                assertThat(request.documents()).hasSize(resend ? 1 : 0);
+                assertThat(request.documents()).allSatisfy(document -> assertThat(document.originalName()).isEqualTo("invoice.pdf"));
+                assertThat(request.metadata().containsKey("sceneParam")).isEqualTo(resend);
+            });
+        }
+        assertThat(messages.messages).filteredOn(message -> "user".equals(message.role()))
+                .singleElement().satisfies(message -> assertThat(message.content()).isEmpty());
+        assertNoPrivateEvents();
+    }
+
+    private AgentRuntime capturingRelay() {
+        return new AgentRuntime() {
+            @Override
+            public Flux<ChatEvent> query(AgentRuntimeRequest request) {
+                relayRequests.add(request);
+                return Flux.empty();
+            }
+
+            @Override
+            public Mono<Void> cancel(AgentRuntimeCancelRequest request) { return Mono.empty(); }
+        };
     }
 
     @ParameterizedTest

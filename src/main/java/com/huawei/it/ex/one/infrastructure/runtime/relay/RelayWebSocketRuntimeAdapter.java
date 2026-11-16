@@ -61,6 +61,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Relay WebSocket 协议实现。
@@ -870,7 +871,7 @@ public class RelayWebSocketRuntimeAdapter implements RelayRuntimeProtocolAdapter
     private String userMessage(AgentRuntimeRequest request) {
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("type", "user-message");
-        message.put("content", request.message() == null ? "" : request.message());
+        message.put("content", messageContent(request));
         if (request.memoryContext() != null && request.memoryContext().shortTermEnabled()) {
             message.put("messages", request.memoryContext().agentRuntimeMessages());
         }
@@ -889,7 +890,7 @@ public class RelayWebSocketRuntimeAdapter implements RelayRuntimeProtocolAdapter
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("type", "chat_expert");
         message.put("roleName", runtimeProfile.roleName());
-        message.put("content", request.message() == null ? "" : request.message());
+        message.put("content", messageContent(request));
         if (request.memoryContext() != null && request.memoryContext().shortTermEnabled()) {
             message.put("messages", request.memoryContext().agentRuntimeMessages());
         }
@@ -900,6 +901,18 @@ public class RelayWebSocketRuntimeAdapter implements RelayRuntimeProtocolAdapter
             message.put("metadata", metadata);
         }
         return toJson(message);
+    }
+
+    private String messageContent(AgentRuntimeRequest request) {
+        String content = request.message() == null ? "" : request.message();
+        if (!content.isBlank()) {
+            return content;
+        }
+        String fileNames = request.documents().stream()
+                .map(document -> document.originalName())
+                .filter(name -> name != null && !name.isBlank())
+                .collect(Collectors.joining("，"));
+        return fileNames.isEmpty() ? content : "[用户上传文档] " + fileNames;
     }
 
     private void putTraceId(Map<String, Object> target, TraceContext traceContext) {

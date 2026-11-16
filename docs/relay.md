@@ -83,8 +83,15 @@ ChatService在NEW时发送该字段仅用于声明能力，不会把`sessionMode
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | type | string | 是 | 固定值 `"user-message"` |
-| content | string | 是 | 用户输入内容 |
+| content | string | 是 | 用户输入内容；正文为空白且有可信文件名时，补为 `[用户上传文档] 文件名1，文件名2` |
 | metadata | object | 否 | 业务扩展元数据；ChatService 会从 `AgentRuntimeRequest.metadata()` 透传非敏感字段，过滤 Cookie、token、Authorization、secret、password 等敏感 key |
+
+ChatService 对 `user-message` 和 `chat_expert` 共用仅附件正文补齐规则：正文为 null、空字符串或纯空白时，
+从本次已校验的文档快照读取非空白原始文件名，按原顺序以中文逗号连接，不去重。有文字时原样保留，
+不 trim、不追加文件名；无文档或没有有效文件名时保持旧输出（null 转空字符串，其他空白保留）。
+不使用前端附件展示名称、metadata、URL 或文档 ID 猜测文件名，不新增 `query` 字段。
+此规则覆盖 Delegate/专家的 NEW/RESUME 普通问答，包含直连、候选切换及拒答重新意图，
+不修改用户历史正文、`messages`、文件 metadata、问卷 `approval-response` 或 Stop。
 
 > **注意**：`app_mode` 无需传入，后端默认使用 `delegate` 模式。
 

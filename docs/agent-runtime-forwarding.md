@@ -386,7 +386,7 @@ Interaction 保存的 autoActionAt，且保存的 autoActionType=IGNORE_QUESTION
 | 业务字段 | 条件及覆盖 |
 | --- | --- |
 | type / roleName | Delegate 为 user-message，无 roleName；专家为 chat_expert，roleName 与 config 一致，来自可信档案 |
-| content | 当前问题，内部 null 回退空字符串 |
+| content | 当前问题非空白时原样发送；空白且有可信文件名时补为 `[用户上传文档] 文件名1，文件名2`；无有效文件名时保持原输出，null 回退空字符串 |
 | messages | 仅 memoryContext.shortTermEnabled=true 时发送（可空数组），每项 role/content/可选 skillId；不从 metadata 提升 |
 | traceId | 原 TraceContext 有值时发送；没有则省略 |
 | metadata | 清理后加可信身份字段，非空才发送；不是顶层展开 |
@@ -395,6 +395,29 @@ Relay metadata 递归过滤：key trim/转小写后等于 traceid，或包含 co
 的字段移除；私有观测 key 移除；Map 中 null 值移除，数组顺序保留。身份上下文提供非空 userAccount 时
 trim 后覆盖同名 metadata，globalUserId 非 null 时覆盖为数字；缺少可信值时此 Mapper 不补造替代值。
 不把请求的 target/selectedIntent/agentMode 自动作为业务帧字段；不自动新增顶层附件数组。
+
+仅附件正文补齐从本次已校验的 `documents[].originalName` 取非空白文件名，保留顺序和重复名称，
+不读取文件内容，也不从附件展示名称、metadata、URL 或 documentId 推测名称。
+仅在 Relay 出站时生成 `content`，不修改原问题、持久化消息或短期记忆；有文字时包括空格均保持不变。
+Delegate/专家、NEW/RESUME 及拒答重路由共用此规则；DomainAgent 的 `query` 与 Intent 参数不变。
+拒答确认仍要求本次显式提交附件引用，不自动恢复上一轮文件；仅传 `metadata.sceneParam.docList` 不会触发正文补齐。
+
+无正文、两个有效文件名的 Delegate 业务帧示例（无 Trace、身份和短期记忆）：
+
+<!-- contract: relay-attachment-query -->
+```json
+{
+  "type": "user-message",
+  "content": "[用户上传文档] 销售数据.xlsx，指标说明.pdf",
+  "metadata": {
+    "sceneParam": {
+      "docList": [{"docId": "provider_sales"}, {"docId": "provider_notes"}]
+    }
+  }
+}
+```
+
+专家使用相同 `content`，业务帧仍为 `type=chat_expert` 并携带可信 `roleName`；不新增顶层 `query`。
 
 ### 4.3 问卷 RESUME
 

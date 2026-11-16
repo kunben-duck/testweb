@@ -921,6 +921,13 @@ sequenceDiagram
 前端统一使用原有“同意重新识别／拒绝”确认，不根据 `refusalRecoverable` 展示原技能重试选项。
 已保存的确认仍提交原 `approved=true/false`；已撤销的 `RETRY_CURRENT` 在 claim 前返回400，不消耗等待状态。
 
+仅上传文件而未输入文字时，确认重新意图仍需在本次请求携带原文件的 `documentId`，无需重新上传。
+Intent 的 `query` 使用 `[用户上传文档] 文件名1，文件名2`；后续目标为 Relay Delegate 或专家时，
+服务端也会在其普通问答 `content` 为空白时，用本次可信文档名称补齐上述文本。
+Relay 已有文字时不追加、不 trim；DomainAgent 的 `query` 仍保留原问题，文件继续通过原 metadata 链路传递。
+该 Relay 规则同样适用于普通提问、绑定直连、候选切换及 NEW/RESUME，不修改前端请求字段、历史正文或消息事件。
+确认未带附件、仅有业务 metadata 文件信息或没有有效文件名时，不自动补文件名，也不恢复上一轮附件。
+
 同一 Run 内发生拒答重意图时，发送给 Intent 的 `history` 排除本 Run 的全部中间路由，数据库过滤发生在
 TopK 前，内存中的本轮路由也不会补回。之前 Run（包括 Ask User 或澄清续跑的来源 Run）的记录仍保留，
 不按相同问题文本或技能名称去重。`routeTrigger=domain_reject`、本次拒答原因和澄清链继续传递。

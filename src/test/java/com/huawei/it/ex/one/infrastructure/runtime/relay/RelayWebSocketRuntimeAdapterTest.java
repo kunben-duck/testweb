@@ -14,7 +14,9 @@ import com.huawei.it.ex.one.application.integration.agent.RuntimeForwardHeaders;
 import com.huawei.it.ex.one.application.integration.agent.RuntimeInteractionDispatchState;
 import com.huawei.it.ex.one.application.integration.agent.RuntimeSessionMode;
 import com.huawei.it.ex.one.common.trace.TraceContext;
+import com.huawei.it.ex.one.domain.chat.AttachmentRef;
 import com.huawei.it.ex.one.domain.chat.ChatEvent;
+import com.huawei.it.ex.one.domain.document.UploadedDocument;
 import com.huawei.it.ex.one.domain.memory.ConversationMemoryMessage;
 import com.huawei.it.ex.one.domain.memory.MemoryContext;
 import com.huawei.it.ex.one.domain.routing.RouteTarget;
@@ -33,7 +35,9 @@ import reactor.test.StepVerifier;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.reactivestreams.Publisher;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -54,15 +58,92 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 class RelayWebSocketRuntimeAdapterTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @ParameterizedTest
+    @MethodSource("attachmentContentCases")
+    void onlyBlankContentUsesTrustedDocumentNames(boolean expert, RuntimeSessionMode mode,
+                                                  AttachmentContentCase input) throws Exception {
+        FakeWebSocketClient client = new FakeWebSocketClient(List.of(
+                "{\"type\":\"session-ready\",\"session_id\":\"relay-session-1\"}",
+                "{\"type\":\"session-state\",\"state\":\"completed\"}"));
+        AgentRuntimeRequest request = attachmentContentRequest(expert, mode, input);
+        JsonNode before = objectMapper.findAndRegisterModules().valueToTree(request);
+
+        StepVerifier.create(adapter(client).query(request)).expectNextCount(3).verifyComplete();
+
+        assertThat(client.sent()).hasSize(2);
+        JsonNode config = objectMapper.readTree(client.sent().get(0));
+        assertThat(config.path("type").asText()).isEqualTo("config");
+        assertThat(config.path("config").path("sessionMode").asText()).isEqualTo(mode.name().toLowerCase(Locale.ROOT));
+        assertThat(config.path("config").path("sessionId").asText())
+                .isEqualTo(mode == RuntimeSessionMode.NEW ? "session1" : "relay-session-1");
+        assertThat(config.path("config").path("appMode").asText()).isEqualTo(expert ? "domain_expert" : "delegate");
+        Map<String, Object> expected = new HashMap<>();
+        expected.put("type", expert ? "chat_expert" : "user-message");
+        if (expert) {
+            expected.put("roleName", "system-awareness");
+        }
+        expected.put("content", input.expected());
+        expected.put("traceId", "attachment-trace");
+        expected.put("messages", request.memoryContext().agentRuntimeMessages());
+        expected.put("metadata", Map.of("sceneParam", request.metadata().get("sceneParam"),
+                "userAccount", "account1", "globalUserId", 1001L));
+        assertThat(objectMapper.readTree(client.sent().get(1)))
+                .isEqualTo(objectMapper.readTree(objectMapper.writeValueAsString(expected)));
+        assertThat(objectMapper.<JsonNode>valueToTree(request)).isEqualTo(before);
+    }
+
+    private static Stream<Arguments> attachmentContentCases() {
+        List<AttachmentContentCase> cases = List.of(
+                new AttachmentContentCase(null, List.of("销售数据.xlsx"), "[用户上传文档] 销售数据.xlsx"),
+                new AttachmentContentCase("", List.of("销售数据.xlsx", "指标说明.pdf"),
+                        "[用户上传文档] 销售数据.xlsx，指标说明.pdf"),
+                new AttachmentContentCase(" \t\n", List.of("\uD83D\uDCCA.xlsx", "报告.pdf", "\uD83D\uDCCA.xlsx"),
+                        "[用户上传文档] \uD83D\uDCCA.xlsx，报告.pdf，\uD83D\uDCCA.xlsx"),
+                new AttachmentContentCase("  分析文件\n", List.of("销售数据.xlsx"), "  分析文件\n"),
+                new AttachmentContentCase("[用户上传文档] 销售数据.xlsx", List.of("销售数据.xlsx"),
+                        "[用户上传文档] 销售数据.xlsx"),
+                new AttachmentContentCase(null, List.of(), ""),
+                new AttachmentContentCase("", List.of(), ""),
+                new AttachmentContentCase(" \t", List.of(), " \t"),
+                new AttachmentContentCase(null, Arrays.asList(null, "", " \t"), ""),
+                new AttachmentContentCase(" \t", Arrays.asList(null, "", " \t"), " \t"),
+                new AttachmentContentCase("", Arrays.asList(null, "", " ", " 文件.pdf "), "[用户上传文档]  文件.pdf "));
+        return Stream.of(false, true).flatMap(expert -> Stream.of(RuntimeSessionMode.NEW, RuntimeSessionMode.RESUME)
+                .flatMap(mode -> cases.stream().map(input -> Arguments.of(expert, mode, input))));
+    }
+
+    private AgentRuntimeRequest attachmentContentRequest(boolean expert, RuntimeSessionMode mode,
+                                                         AttachmentContentCase input) {
+        AgentRuntimeRequest base = expert ? expertRequest("relay-session-1", mode, MemoryContext.empty())
+                : request("relay-session-1", mode, "run1");
+        List<UploadedDocument> documents = input.names().stream().map(name -> new UploadedDocument(
+                "doc-1", "tenant1", "user1", "session1", name, "test", "locator", "application/pdf", 12,
+                "AVAILABLE", "LOCAL_UPLOAD", null, "{}", Instant.EPOCH, Instant.EPOCH)).toList();
+        MemoryContext memory = new MemoryContext(List.of(), List.of(), null, true, List.of(
+                new ConversationMemoryMessage("user", "历史问题"),
+                new ConversationMemoryMessage("assistant", "历史回答")));
+        return new AgentRuntimeRequest(base.tenantId(), base.userId(), base.userAccount(), base.globalUserId(),
+                base.sessionId(), base.runId(), base.runtimeSessionId(), mode, input.message(),
+                List.of(new AttachmentRef("doc-1", "untrusted-name.pdf", null, null)), documents, memory,
+                base.intentDecision(), base.routeTarget(), Map.of("sceneParam", Map.of("docList", List.of(
+                        Map.of("docId", "provider-doc", "docName", "metadata-name.pdf", "url", "https://files.test/doc")))),
+                base.bindingMetadata(), base.forwardHeaders(), new TraceContext("attachment-trace"));
+    }
+
+    private record AttachmentContentCase(String message, List<String> names, String expected) { }
 
     @ParameterizedTest
     @CsvSource({
