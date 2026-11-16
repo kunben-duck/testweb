@@ -183,10 +183,6 @@ final class DomainAgentRefusalEventFactory {
         rerouteState.put(DomainAgentRejectReason.METADATA_KEY, reroute.lastIntentRejectReason().toMap());
         rerouteState.put("rerouteCount", context.rerouteCount());
         putIfNotNull(rerouteState, "confirmationInteractionId", reroute.confirmationInteractionId());
-        // 仅延续旧澄清上下文的提前计数标记，新确认流程不生成该标记。
-        if (reroute.attemptCounted()) {
-            rerouteState.put("attemptCounted", true);
-        }
         if (reroute.confirmed()) {
             rerouteState.putAll(context.persistenceState().runMetadataOverlay());
         }

@@ -17,17 +17,8 @@ record DomainAgentRerouteContext(
         Set<String> rejectedDomainAgentIds,
         String intentQuery,
         AgentModeProfile agentMode,
-        String confirmationInteractionId,
-        boolean attemptCounted
+        String confirmationInteractionId
 ) {
-    DomainAgentRerouteContext(DomainAgentRunContext context, DomainAgentRefusal refusal,
-                             DomainAgentRejectReason lastIntentRejectReason, String currentDomainAgentId,
-                             Set<String> rejectedDomainAgentIds, String intentQuery, AgentModeProfile agentMode,
-                             String confirmationInteractionId) {
-        this(context, refusal, lastIntentRejectReason, currentDomainAgentId, rejectedDomainAgentIds,
-                intentQuery, agentMode, confirmationInteractionId, false);
-    }
-
     DomainAgentRerouteContext(DomainAgentRunContext context, DomainAgentRefusal refusal,
                              DomainAgentRejectReason lastIntentRejectReason, String currentDomainAgentId,
                              Set<String> rejectedDomainAgentIds, String intentQuery, AgentModeProfile agentMode) {

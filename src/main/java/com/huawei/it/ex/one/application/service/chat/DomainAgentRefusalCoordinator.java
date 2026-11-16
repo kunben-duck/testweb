@@ -224,7 +224,7 @@ final class DomainAgentRefusalCoordinator {
                 state.rejectedDomainAgentIds(),
                 blankToDefault(request.intentRouteMemoryQuery(), request.context().routeMemoryQuery()),
                 request.agentMode(),
-                state.confirmationInteractionId(), state.attemptCounted());
+                state.confirmationInteractionId());
         return continueAfterReroute(reroute, request.routeSignal());
     }
 

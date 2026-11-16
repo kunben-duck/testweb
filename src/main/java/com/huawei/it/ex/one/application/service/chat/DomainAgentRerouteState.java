@@ -15,13 +15,6 @@ record DomainAgentRerouteState(
         DomainAgentRejectReason lastIntentRejectReason,
         Set<String> rejectedDomainAgentIds,
         int rerouteCount,
-        String confirmationInteractionId,
-        boolean attemptCounted
+        String confirmationInteractionId
 ) {
-    DomainAgentRerouteState(String currentTargetId, String currentBindingId, String currentRouteSource,
-                            DomainAgentRefusal refusal, DomainAgentRejectReason lastIntentRejectReason,
-                            Set<String> rejectedDomainAgentIds, int rerouteCount, String confirmationInteractionId) {
-        this(currentTargetId, currentBindingId, currentRouteSource, refusal, lastIntentRejectReason,
-                rejectedDomainAgentIds, rerouteCount, confirmationInteractionId, false);
-    }
 }

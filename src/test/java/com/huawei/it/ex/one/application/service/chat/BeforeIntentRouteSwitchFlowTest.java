@@ -367,8 +367,8 @@ class BeforeIntentRouteSwitchFlowTest extends ChatFlowTestSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"CLARIFY", "SELECT", "LEGACY_COUNT", "LEGACY_RECLARIFY"})
-    void confirmationCountsAtDispatchAndPreservesLegacyClarificationCount(String mode) {
+    @ValueSource(strings = {"CLARIFY", "SELECT", "RECLARIFY"})
+    void confirmationCountsOnlyWhenReplacementIsDispatched(String mode) {
         recoverable = true;
         alwaysRefuse = true;
         properties.setMaxReroutes(2);
@@ -384,22 +384,17 @@ class BeforeIntentRouteSwitchFlowTest extends ChatFlowTestSupport {
         result = RouteSignalResult.waitingIntentClarification(payload, 1L, 0.85, "intent-session", "intent-request");
         execute(continuation(first, true, Map.of(), null, null));
         ChatInteractionRequest clarification = waiting();
-        Map<String, Object> state = new LinkedHashMap<>(DomainAgentQuestionnaireContext.map(
-                clarification.requestPayload().get(RouteResolutionCoordinator.DOMAIN_AGENT_REROUTE_CONTEXT_METADATA)));
+        Map<String, Object> state = DomainAgentQuestionnaireContext.map(
+                clarification.requestPayload().get(RouteResolutionCoordinator.DOMAIN_AGENT_REROUTE_CONTEXT_METADATA));
         assertThat(state).containsEntry("rerouteCount", 0).doesNotContainKey("attemptCounted");
-        if (mode.startsWith("LEGACY_")) {
-            state.put("attemptCounted", true);
-            state.put("rerouteCount", 1);
-            Map<String, Object> oldPayload = new LinkedHashMap<>(clarification.requestPayload());
-            oldPayload.put(RouteResolutionCoordinator.DOMAIN_AGENT_REROUTE_CONTEXT_METADATA, state);
-            replacePayload(clarification, oldPayload);
-        }
-        if ("LEGACY_RECLARIFY".equals(mode)) {
+        assertThat(queries).hasValue(1);
+        if ("RECLARIFY".equals(mode)) {
             execute(continuation(clarification, null, Map.of("which period?", "this month"), null, null));
             clarification = waiting();
             assertThat(DomainAgentQuestionnaireContext.map(clarification.requestPayload().get(
                     RouteResolutionCoordinator.DOMAIN_AGENT_REROUTE_CONTEXT_METADATA)))
-                    .containsEntry("rerouteCount", 1).containsEntry("attemptCounted", true);
+                    .containsEntry("rerouteCount", 0).doesNotContainKey("attemptCounted");
+            assertThat(queries).hasValue(1);
         }
         result = RouteSignalResult.of(RouteTarget.domainAgent("agent-b", "intent-agent"));
         assertThat(execute(continuation(clarification, null,
@@ -407,6 +402,7 @@ class BeforeIntentRouteSwitchFlowTest extends ChatFlowTestSupport {
                 "SELECT".equals(mode) ? "agent-b" : null, null)).getLast().type()).isEqualTo("run.waiting_user");
         ChatInteractionRequest next = waiting();
         assertThat(RouteSwitchRerouteContext.require(next).state().rerouteCount()).isEqualTo(1);
+        assertThat(queries).hasValue(2);
         assertThat(execute(continuation(next, true, Map.of(), null, null)).getLast().type())
                 .isEqualTo("run.completed");
         assertThat(queries).hasValue(3);
