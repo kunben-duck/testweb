@@ -225,6 +225,14 @@ curl -fsS "$BASE_URL/actuator/health"
 当前默认配置关闭数据库和 Redis health indicator，`UP` 不能证明数据库和 Redis 可用。开始压测前还必须分别执行
 数据库连接、Redis `PING`、模拟器健康检查和一个完整的 run smoke test。
 
+需要从服务实例拨测依赖时，按 [应用与依赖拨测](health-probes.md) 的完整部署配置启用，仓库默认值不变。
+启用后用 `/actuator/health/readiness` 检查就绪、`/actuator/health/dependencies` 检查数据库和 Redis；
+根 `/actuator/health` 同时纳入依赖，不再是无依赖的存活检查。Redis 内置检查使用 INFO 或集群信息，
+不能用独立 PING 成功代替其 ACL 与协议验证；依赖 UP 也不能代替完整 run smoke test。
+拨测初始频率分别为每实例 30/60 秒，客户端超时分别为 3/5 秒，错峰且不并发重复请求。
+这些频率与告警规则在监控平台配置，不增加服务端任务；客户端超时不保证服务端检查已结束。
+压测报告同时记录拨测流量、连接池等待及失败日志，不把拨测成本视为零。
+
 ## 8. 压测身份
 
 当前 `ApplicationAuthContextProvider` 使用固定身份。直接使用该实现压测时，所有请求都会被识别为同一用户，随后受到：

@@ -51,6 +51,13 @@ ChatService 的长短期记忆是可选 SuperAgent 增强能力，默认关闭�
 DomainAgent HTTP及Relay WS握手透传 `X-Trace-Id/X-Observation-Id`，Intent仅记录观测、不透传。
 配置、两表字段、计时口径、失败隔离及发布验证见 [问答观测说明](docs/observability.md)。
 
+## 应用与依赖拨测
+
+复用现有 Actuator，通过部署配置启用 `/actuator/health/readiness` 和 `/actuator/health/dependencies`。
+前者仅检查应用就绪，后者检查数据库与 Redis；仓库默认仍关闭依赖检查，不新增定时任务。
+完整配置、响应、拨测频率及共享连接资源边界见 [拨测接入说明](docs/health-probes.md)。
+启用后根 `/actuator/health` 也会检查依赖，不能再作为无依赖的存活检查。
+
 ## 前端接入协议
 
 完整接口和 WebSocket 联调说明见 [前端联调文档](docs/frontend-integration.md)。其中“逐接口最小入参示例”和“`/v1/chat/runs` 不同场景请求体示例”是前端请求体样例的维护入口。
