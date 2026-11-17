@@ -83,7 +83,7 @@ ChatService在NEW时发送该字段仅用于声明能力，不会把`sessionMode
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | type | string | 是 | 固定值 `"user-message"` |
-| content | string | 是 | 用户输入内容；正文为空白且有可信文件名时，补为 `[用户上传文档] 文件名1，文件名2` |
+| content | string | 是 | 用户输入内容；正文为空白且有可信文件名时，补为 `[用户上传文件] 文件名1，文件名2` |
 | metadata | object | 否 | 业务扩展元数据；ChatService 会从 `AgentRuntimeRequest.metadata()` 透传非敏感字段，过滤 Cookie、token、Authorization、secret、password 等敏感 key |
 
 ChatService 对 `user-message` 和 `chat_expert` 共用仅附件正文补齐规则：正文为 null、空字符串或纯空白时，

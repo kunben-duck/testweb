@@ -912,7 +912,7 @@ public class RelayWebSocketRuntimeAdapter implements RelayRuntimeProtocolAdapter
                 .map(document -> document.originalName())
                 .filter(name -> name != null && !name.isBlank())
                 .collect(Collectors.joining("，"));
-        return fileNames.isEmpty() ? content : "[用户上传文档] " + fileNames;
+        return fileNames.isEmpty() ? content : "[用户上传文件] " + fileNames;
     }
 
     private void putTraceId(Map<String, Object> target, TraceContext traceContext) {

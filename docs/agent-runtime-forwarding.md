@@ -386,7 +386,7 @@ Interaction 保存的 autoActionAt，且保存的 autoActionType=IGNORE_QUESTION
 | 业务字段 | 条件及覆盖 |
 | --- | --- |
 | type / roleName | Delegate 为 user-message，无 roleName；专家为 chat_expert，roleName 与 config 一致，来自可信档案 |
-| content | 当前问题非空白时原样发送；空白且有可信文件名时补为 `[用户上传文档] 文件名1，文件名2`；无有效文件名时保持原输出，null 回退空字符串 |
+| content | 当前问题非空白时原样发送；空白且有可信文件名时补为 `[用户上传文件] 文件名1，文件名2`；无有效文件名时保持原输出，null 回退空字符串 |
 | messages | 仅 memoryContext.shortTermEnabled=true 时发送（可空数组），每项 role/content/可选 skillId；不从 metadata 提升 |
 | traceId | 原 TraceContext 有值时发送；没有则省略 |
 | metadata | 清理后加可信身份字段，非空才发送；不是顶层展开 |
@@ -408,7 +408,7 @@ Delegate/专家、NEW/RESUME 及拒答重路由共用此规则；DomainAgent 的
 ```json
 {
   "type": "user-message",
-  "content": "[用户上传文档] 销售数据.xlsx，指标说明.pdf",
+  "content": "[用户上传文件] 销售数据.xlsx，指标说明.pdf",
   "metadata": {
     "sceneParam": {
       "docList": [{"docId": "provider_sales"}, {"docId": "provider_notes"}]

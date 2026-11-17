@@ -155,11 +155,11 @@ class ChatInteractionApplicationServiceTest {
 
         ChatInteractionClaimResult claim = service.claimPreparedInteractionResponse(
                 command, "run-continue", request -> service.prepareResponsePayload(
-                        command, request.interactionType(), "[用户上传文档] invoice.pdf"));
+                        command, request.interactionType(), "[用户上传文件] invoice.pdf"));
 
         assertThat(claim.responsePayload())
                 .containsEntry("questionnaireAnswers", Map.of())
-                .containsEntry("answerText", "[用户上传文档] invoice.pdf");
+                .containsEntry("answerText", "[用户上传文件] invoice.pdf");
         assertThat(repository.claimCalls).isEqualTo(1);
     }
 

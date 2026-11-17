@@ -720,7 +720,7 @@ class BeforeIntentRouteSwitchFlowTest extends ChatFlowTestSupport {
         assertThat(execute(confirm).getLast().type()).isEqualTo("run.completed");
         assertThat(intents).hasValue(1);
         assertThat(rerouteRequests).singleElement().satisfies(request -> {
-            assertThat(request.intentQuery()).isEqualTo(resend ? "[用户上传文档] invoice.pdf" : null);
+            assertThat(request.intentQuery()).isEqualTo(resend ? "[用户上传文件] invoice.pdf" : null);
             assertThat(request.command().message()).isEmpty();
             assertThat(request.userMessageId()).isEqualTo(first.userMessageId());
         });

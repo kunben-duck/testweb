@@ -402,7 +402,7 @@ class ChatIntentFlowTest extends ChatFlowTestSupport {
 
         assertThat(routedCommand.get()).isNotNull();
         assertThat(routedCommand.get().message()).isEmpty();
-        assertThat(intentQuery).hasValue("[用户上传文档] invoice.pdf，invoice.pdf");
+        assertThat(intentQuery).hasValue("[用户上传文件] invoice.pdf，invoice.pdf");
         assertThat(runtimeRequest.get()).isNotNull();
         assertThat(runtimeRequest.get().traceContext().traceId()).isEqualTo("relay-trace-attachment");
         assertThat(runtimeRequest.get().message()).isEmpty();
@@ -645,7 +645,7 @@ class ChatIntentFlowTest extends ChatFlowTestSupport {
         assertThat(runtimeRequest.get().message()).isEqualTo("需要处理一个复杂任务");
         assertThat(routeMemory.routeDecisions).singleElement().satisfies(command -> {
             assertThat(command.query())
-                    .isEqualTo("需要处理一个复杂任务 [用户上传文档] invoice.pdf");
+                    .isEqualTo("需要处理一个复杂任务 [用户上传文件] invoice.pdf");
             assertThat(command.intent().intentCode()).isEqualTo("relay");
             assertThat(command.intent().intentName()).isEqualTo("no_match");
             assertThat(command.intent().slots())

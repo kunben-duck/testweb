@@ -43,7 +43,7 @@ final class IntentClarificationContextAssembler {
     private static String uploadedDocumentText(List<AttachmentRef> attachments) {
         return attachments == null || attachments.isEmpty()
                 ? null
-                : "[用户上传文档] " + attachments.stream()
+                : "[用户上传文件] " + attachments.stream()
                 .map(AttachmentRef::name)
                 .collect(java.util.stream.Collectors.joining("，"));
     }

@@ -466,7 +466,7 @@ class RouteSignalApplicationServiceTest {
 
         RouteSignalResult result = service.routeInitialWithProgress(new RouteSignalRequest(
                         "run-doc", user, session, original, original.attachments(), memory,
-                        "帮我分析这个文档。 [用户上传文档] 财务报表.pdf"))
+                        "帮我分析这个文档。 [用户上传文件] 财务报表.pdf"))
                 .filter(RouteSignalFrame::resultFrame)
                 .map(RouteSignalFrame::result)
                 .blockLast();
@@ -475,7 +475,7 @@ class RouteSignalApplicationServiceTest {
         assertThat(result.route().type()).isEqualTo(RouteType.DOMAIN_AGENT);
         assertThat(capturedIntentCommand.get()).isNotNull();
         assertThat(capturedIntentCommand.get().message())
-                .isEqualTo("帮我分析这个文档。 [用户上传文档] 财务报表.pdf");
+                .isEqualTo("帮我分析这个文档。 [用户上传文件] 财务报表.pdf");
         assertThat(original.message()).isEqualTo("帮我分析这个文档。");
     }
 

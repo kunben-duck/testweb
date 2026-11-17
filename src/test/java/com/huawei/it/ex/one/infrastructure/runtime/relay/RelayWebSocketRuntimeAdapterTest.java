@@ -107,11 +107,11 @@ class RelayWebSocketRuntimeAdapterTest {
 
     private static Stream<Arguments> attachmentContentCases() {
         List<AttachmentContentCase> cases = List.of(
-                new AttachmentContentCase(null, List.of("销售数据.xlsx"), "[用户上传文档] 销售数据.xlsx"),
+                new AttachmentContentCase(null, List.of("销售数据.xlsx"), "[用户上传文件] 销售数据.xlsx"),
                 new AttachmentContentCase("", List.of("销售数据.xlsx", "指标说明.pdf"),
-                        "[用户上传文档] 销售数据.xlsx，指标说明.pdf"),
+                        "[用户上传文件] 销售数据.xlsx，指标说明.pdf"),
                 new AttachmentContentCase(" \t\n", List.of("\uD83D\uDCCA.xlsx", "报告.pdf", "\uD83D\uDCCA.xlsx"),
-                        "[用户上传文档] \uD83D\uDCCA.xlsx，报告.pdf，\uD83D\uDCCA.xlsx"),
+                        "[用户上传文件] \uD83D\uDCCA.xlsx，报告.pdf，\uD83D\uDCCA.xlsx"),
                 new AttachmentContentCase("  分析文件\n", List.of("销售数据.xlsx"), "  分析文件\n"),
                 new AttachmentContentCase("[用户上传文档] 销售数据.xlsx", List.of("销售数据.xlsx"),
                         "[用户上传文档] 销售数据.xlsx"),
@@ -120,7 +120,7 @@ class RelayWebSocketRuntimeAdapterTest {
                 new AttachmentContentCase(" \t", List.of(), " \t"),
                 new AttachmentContentCase(null, Arrays.asList(null, "", " \t"), ""),
                 new AttachmentContentCase(" \t", Arrays.asList(null, "", " \t"), " \t"),
-                new AttachmentContentCase("", Arrays.asList(null, "", " ", " 文件.pdf "), "[用户上传文档]  文件.pdf "));
+                new AttachmentContentCase("", Arrays.asList(null, "", " ", " 文件.pdf "), "[用户上传文件]  文件.pdf "));
         return Stream.of(false, true).flatMap(expert -> Stream.of(RuntimeSessionMode.NEW, RuntimeSessionMode.RESUME)
                 .flatMap(mode -> cases.stream().map(input -> Arguments.of(expert, mode, input))));
     }

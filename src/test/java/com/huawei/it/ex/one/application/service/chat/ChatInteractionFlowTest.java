@@ -73,9 +73,9 @@ class ChatInteractionFlowTest extends ChatFlowTestSupport {
                 new AttachmentRef("doc2", "测算.xls", "application/vnd.ms-excel", 2L));
 
         assertThat(FinanceEXChatService.clarificationAnswerWithAttachments(null, attachments))
-                .isEqualTo("[用户上传文档] 方案.pdf，测算.xls");
+                .isEqualTo("[用户上传文件] 方案.pdf，测算.xls");
         assertThat(FinanceEXChatService.clarificationAnswerWithAttachments("帮我看下这个文档", attachments))
-                .isEqualTo("帮我看下这个文档 [用户上传文档] 方案.pdf，测算.xls");
+                .isEqualTo("帮我看下这个文档 [用户上传文件] 方案.pdf，测算.xls");
         assertThat(FinanceEXChatService.nextMessageWithAttachments(ChatRunMode.NEXT, null, attachments))
                 .isEmpty();
         assertThat(FinanceEXChatService.nextMessageWithAttachments(ChatRunMode.NEXT, "  ", attachments))
@@ -86,6 +86,18 @@ class ChatInteractionFlowTest extends ChatFlowTestSupport {
                 .isNull();
         assertThat(FinanceEXChatService.nextMessageWithAttachments(ChatRunMode.NEXT, null, List.of()))
                 .isNull();
+    }
+
+    @Test
+    void attachmentPromptsKeepExistingUserText() {
+        String message = "[用户上传文档] 原文件.pdf";
+        List<AttachmentRef> attachments = List.of(new AttachmentRef("doc1", "方案.pdf", "application/pdf", 1L));
+
+        assertThat(FinanceEXChatService.clarificationAnswerWithAttachments(message, List.of())).isEqualTo(message);
+        assertThat(FinanceEXChatService.clarificationAnswerWithAttachments(message, attachments))
+                .isEqualTo(message + " [用户上传文件] 方案.pdf");
+        assertThat(FinanceEXChatService.nextMessageWithAttachments(ChatRunMode.NEXT, message, attachments))
+                .isEqualTo(message);
     }
 
     @Test
@@ -860,7 +872,7 @@ class ChatInteractionFlowTest extends ChatFlowTestSupport {
         assertThat(runtimeQuery).hasValue(
                 "用户:再帮我看下方案；系统追问:您是想看支付方案还是账务方案？；用户:账务相关"
                         + "；系统追问:您提到的方案具体是指哪个方案？"
-                        + "；用户:我是说账务审批的方案 [用户上传文档] invoice.pdf");
+                        + "；用户:我是说账务审批的方案 [用户上传文件] invoice.pdf");
         assertThat(runtimeAttachments.get()).extracting(AttachmentRef::name).containsExactly("invoice.pdf");
         assertThat(runtimeDocuments.get()).extracting(UploadedDocument::id).containsExactly("doc1");
         assertThat(runtimeMetadata.get()).containsEntry("language", "zh_CN");

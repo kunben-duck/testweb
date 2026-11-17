@@ -922,7 +922,7 @@ sequenceDiagram
 已保存的确认仍提交原 `approved=true/false`；已撤销的 `RETRY_CURRENT` 在 claim 前返回400，不消耗等待状态。
 
 仅上传文件而未输入文字时，确认重新意图仍需在本次请求携带原文件的 `documentId`，无需重新上传。
-Intent 的 `query` 使用 `[用户上传文档] 文件名1，文件名2`；后续目标为 Relay Delegate 或专家时，
+Intent 的 `query` 使用 `[用户上传文件] 文件名1，文件名2`；后续目标为 Relay Delegate 或专家时，
 服务端也会在其普通问答 `content` 为空白时，用本次可信文档名称补齐上述文本。
 Relay 已有文字时不追加、不 trim；DomainAgent 的 `query` 仍保留原问题，文件继续通过原 metadata 链路传递。
 该 Relay 规则同样适用于普通提问、绑定直连、候选切换及 NEW/RESUME，不修改前端请求字段、历史正文或消息事件。
@@ -1533,7 +1533,7 @@ curl -X POST http://localhost:8080/v1/chat/runs \
 | `commandId` | string | 否 | 前端命令 ID，用于排障和幂等扩展 |
 | `sessionId` | string | 否 | 聊天会话 ID；为空时后端会创建或归一化 |
 | `conversationId` | string | 否 | 前端对话 ID，通常与 `sessionId` 一致 |
-| `message` | string | 条件必填 | `EDIT_USER` 必填；`NEXT` 必须提供非空 message 或至少一个有效附件。附件-only 的历史正文和 Runtime query 为 `""`；仅 IntentAgent query 会使用可信文件名生成 `[用户上传文档] xxx.pdf，xxx.xls`。未传`sessionId`自动创建会话时，可信文件名去除最后扩展名后同时作为初始标题。`REGENERATE_ASSISTANT` 和 `CONTINUE_INTERACTION` 可为空 |
+| `message` | string | 条件必填 | `EDIT_USER` 必填；`NEXT` 必须提供非空 message 或至少一个有效附件。附件-only 的历史正文和 DomainAgent 普通问答 query 为 `""`；IntentAgent query 使用可信文件名生成 `[用户上传文件] xxx.pdf，xxx.xls`，Relay 普通问答 content 为空白且有有效文件名时也补齐该文本。未传`sessionId`自动创建会话时，可信文件名去除最后扩展名后同时作为初始标题。`REGENERATE_ASSISTANT` 和 `CONTINUE_INTERACTION` 可为空 |
 | `intentAccessName` | string | 否 | 本次Intent调用的逻辑入口名称，最大128字符并保留大小写；前端不带部署前缀，非空时由出站Mapper拼接`FINANCEEX_INTENT_REQUEST_ACCESS_NAME_PREFIX`（默认空，不去重）。字段为兼容旧客户端而保持可选，但多入口前端应在普通提问、直连DomainAgent、EDIT、REGENERATE、`forceReroute`及可能重新调用Intent的Interaction续接中每次显式提交当前入口。ACTIVE Binding可能跳过首次Intent，但同一Run内DomainAgent拒答时仍使用本次值；普通模式不继承上一Run或Binding。未传或空白时使用服务端`FINANCEEX_INTENT_ACCESS_NAME`，不加前缀。`INTENT_EXPERT`首次选择或切换时必填，后续使用会话保存值。该字段不进入业务metadata、DomainAgent或Relay请求。 |
 | `runMode` | string | 否 | 消息树写入模式：`NEXT`、`EDIT_USER`、`REGENERATE_ASSISTANT`、`CONTINUE_INTERACTION`，默认 `NEXT` |
 | `parentMessageId` | string | 否 | `NEXT` 模式显式父节点；为空时使用会话 `currentLeafMessageId` |
@@ -1867,7 +1867,7 @@ Relay虽然会递归过滤敏感键，但前端不能依赖该过滤代替输入
 }
 ```
 
-服务端回查真实文件名后，发送给 intent-agent 的本轮 query 类似 `[用户上传文档] 真实文件名.pdf`。
+服务端回查真实文件名后，发送给 intent-agent 的本轮 query 类似 `[用户上传文件] 真实文件名.pdf`。
 本轮历史 user 消息的 `content` 为 `""`，附件通过标准 `attachments[]` 返回。前端的
 `name/contentType/sizeBytes/source` 只用于提交前展示，不作为历史或下游事实。
 
@@ -1892,7 +1892,7 @@ Relay虽然会递归过滤敏感键，但前端不能依赖该过滤代替输入
 }
 ```
 
-发送给 IntentAgent 的本轮 query 类似 `帮我看下这个方案 [用户上传文档] 方案.pdf，测算.xls`，但历史
+发送给 IntentAgent 的本轮 query 类似 `帮我看下这个方案 [用户上传文件] 方案.pdf，测算.xls`，但历史
 user 消息正文仍为 `帮我看下这个方案`。多轮澄清按首次出现的 `documentId` 累计附件；metadata 不累计，
 最终 DomainAgent/Relay 只使用命中路由这一轮的 metadata，并接收包含各轮可信文件名的完整折叠 query。
 服务端保留 `sceneParam` 其他字段，并用累计文档已保存的完整 `providerDocument` 对象覆盖 `docList`；

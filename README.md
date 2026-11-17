@@ -265,9 +265,9 @@ Ask User等待仍保持ACTIVE，回答后正常完成才转换；失败、Stop�
 所有 `runMode=NEXT` 请求都支持附件-only：当 `message` 为空或仅包含空白且至少有一个有效附件时，
 ChatService 将历史 user 消息正文保存为 `""`，附件仍通过标准 `attachments[]` 返回。只有实际调用
 IntentAgent 时，服务端才使用可信文件名派生临时 query：附件-only 为
-`[用户上传文档] xxx.pdf，xxx.xls`，文本加附件为 `用户原文 [用户上传文档] xxx.pdf，xxx.xls`。
-该临时 query 不覆盖消息正文或 run metadata；DomainAgent 直连、active binding 续接以及最终
-Relay/DomainAgent 请求仍使用用户原文，附件-only 时 query 为 `""`。由 IntentAgent 形成的
+`[用户上传文件] xxx.pdf，xxx.xls`，文本加附件为 `用户原文 [用户上传文件] xxx.pdf，xxx.xls`。
+该临时 query 不覆盖消息正文或 run metadata；DomainAgent 普通问答仍使用用户原文，附件-only 时 query 为 `""`。
+Relay 普通问答在 content 为空白且有可信文件名时补为 `[用户上传文件] xxx.pdf，xxx.xls`，已有文字原样保留。由 IntentAgent 形成的
 RouteMemory 使用临时 Intent query，前端直选路由仍使用用户原文。前端传入的附件名称不参与生成。
 当附件-only请求未传`sessionId`并由`/runs`自动创建会话时，服务端在原有附件校验中取得可信文件名，
 仅使用第一个附件并移除其最后一个扩展名，直接作为现有会话INSERT的初始AUTO标题；不会增加附件查询、
@@ -532,7 +532,7 @@ RouteMemory 负责为意图服务生成 `conversationContext`：普通无绑定�
 保存限制和原截断规则，该限制不是排队对象的内存上限。开启后每个模糊结果增加一次 best-effort 异步 INSERT，
 不补写历史；字段口径见 [模糊意图记录](docs/intent/intent.md#9-模糊意图原始结果记录)。
 
-意图澄清续接时允许提交答案、附件和 metadata。附件在 Interaction claim 前按 `documentId` 校验归属、状态和真实文件名；历史 user 消息只保存用户真实回答，附件-only 时正文为 `""`，附件通过标准 `attachments[]` 返回。仅发送给 IntentAgent 的本轮 query 会追加文件名：附件-only 为 `[用户上传文档] xxx.pdf`，文本加附件为 `答案 [用户上传文档] xxx.pdf，xxx.xls`。IntentAgent 不接收文档 ID、URL 或完整业务 metadata。最终目标确定后，DomainAgent/Relay 收到 `用户:原问题；系统追问:...；用户:...` 形式的完整折叠问题，其中各轮附件以可信文件名体现，并使用最终一轮 metadata；服务端以整条澄清链累计的可信文档覆盖 `sceneParam.docList`。每轮澄清 user/assistant 消息属于消息树事实，但不会单独写 RouteMemory `ROUTE`；最终 binding 成功后才折叠澄清链并记录一次路由。
+意图澄清续接时允许提交答案、附件和 metadata。附件在 Interaction claim 前按 `documentId` 校验归属、状态和真实文件名；历史 user 消息只保存用户真实回答，附件-only 时正文为 `""`，附件通过标准 `attachments[]` 返回。仅发送给 IntentAgent 的本轮 query 会追加文件名：附件-only 为 `[用户上传文件] xxx.pdf`，文本加附件为 `答案 [用户上传文件] xxx.pdf，xxx.xls`。IntentAgent 不接收文档 ID、URL 或完整业务 metadata。最终目标确定后，DomainAgent/Relay 收到 `用户:原问题；系统追问:...；用户:...` 形式的完整折叠问题，其中各轮附件以可信文件名体现，并使用最终一轮 metadata；服务端以整条澄清链累计的可信文档覆盖 `sceneParam.docList`。每轮澄清 user/assistant 消息属于消息树事实，但不会单独写 RouteMemory `ROUTE`；最终 binding 成功后才折叠澄清链并记录一次路由。
 
 同一 Run 的拒答重意图（`routeTrigger=domain_reject`）会在 TopK 之前按当前可信 `runId` 排除本轮全部
 路由记录，并停止合并内存 inline route，避免异步落库时序导致本轮中间技能重新进入 Intent `history`。
