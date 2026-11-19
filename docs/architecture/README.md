@@ -9,6 +9,9 @@ WCM、ALB、Jalor、ADS与Admin/Tool/Relay/Chat共享数据依赖，以及跨AZ�
 主编排代码阅读顺序、状态机、记忆边界和调试入口参见
 [FinanceEXChatService 开发导读](../onboarding.md)。
 
+Run 准入、流式输出、正常完成及等待分支分别写哪些表，参见
+[Chat Run 主流程数据库写入时序](chat-run-database-write-sequence.md)。
+
 流式事件落库、Redis/WebSocket 实时扇出、Event Resume、跨浏览器恢复及实例故障边界的完整实现说明，
 参见 [Chat 流式输出、断点续传与跨浏览器恢复设计](chat-streaming-and-resume.md)。
 
