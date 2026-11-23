@@ -13,6 +13,7 @@ import com.huawei.it.ex.one.application.integration.intent.IntentDecisionStreamF
 import com.huawei.it.ex.one.application.integration.intent.IntentRecognitionResult;
 import com.huawei.it.ex.one.application.integration.intent.IntentUserPreferenceCorrection;
 import com.huawei.it.ex.one.application.service.auth.AuthHeaderProviderRegistry;
+import com.huawei.it.ex.one.application.service.observation.ObservationTestFixture;
 import com.huawei.it.ex.one.domain.auth.UserContext;
 import com.huawei.it.ex.one.domain.chat.ChatCommand;
 import com.huawei.it.ex.one.domain.chat.ChatRunMode;
@@ -31,7 +32,10 @@ import reactor.core.scheduler.Schedulers;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -47,6 +51,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 class FinEurekaIntentStreamClientTest {
     private static final String ROUTE_SINGLE_RESULT = """
@@ -134,16 +139,24 @@ class FinEurekaIntentStreamClientTest {
         }
     }
 
-    @Test
-    void observesEachHttpRetryWithoutAddingNewHeadersOrChangingBody() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void observesEachHttpRetryWithoutAddingNewHeadersOrChangingBody(boolean businessFailure) throws Exception {
         AtomicInteger attempts = new AtomicInteger();
         AtomicReference<String> body = new AtomicReference<>();
         List<com.sun.net.httpserver.Headers> headers = new CopyOnWriteArrayList<>();
-        try (var observation = new com.huawei.it.ex.one.application.service.observation.ObservationTestFixture();
+        try (var observation = new ObservationTestFixture();
              StreamServerFixture server = server(body, null, exchange -> {
                  headers.add(exchange.getRequestHeaders());
-                 write(exchange, attempts.incrementAndGet() == 1
-                         ? "event: error\ndata: {\"code\":504}\n\n" : ROUTE_SINGLE_RESULT);
+                 if (attempts.incrementAndGet() == 1) {
+                     observation.advance(Duration.ofMillis(80));
+                     write(exchange, businessFailure
+                             ? "event: result\ndata: {\"status\":\"fail\",\"code\":500}\n\n"
+                             : "event: error\ndata: {\"code\":504}\n\n");
+                 } else {
+                     observation.advance(Duration.ofMillis(120));
+                     write(exchange, ROUTE_SINGLE_RESULT);
+                 }
              })) {
             observation.start("run");
             var client = client(server, properties(1));
@@ -151,19 +164,74 @@ class FinEurekaIntentStreamClientTest {
             var frames = client.recognize(command(), MemoryContext.empty(), user(), "user-1",
                     observation.turns.context("run")).collectList().block(Duration.ofSeconds(5));
             assertThat(frames).isNotEmpty();
-            com.huawei.it.ex.one.application.service.observation.ObservationTestFixture.await(
+            ObservationTestFixture.await(
                     () -> observation.calls.stream().filter(c -> "FINISHED".equals(c.status())).count() == 2);
             assertThat(attempts).hasValue(2);
             assertThat(headers).allSatisfy(h -> assertThat(h).doesNotContainKeys("X-Trace-Id", "X-Observation-Id"));
             assertThat(body.get()).doesNotContain("turn_", "obs_", "turnTraceContext", "_turnObservation");
             var ended = observation.calls.stream().filter(c -> "FINISHED".equals(c.status())).toList();
             assertThat(ended.get(0).outcome()).isEqualTo("ERROR");
+            assertThat(ended.get(0).firstBusinessFrameLatencyMs()).isEqualTo(businessFailure ? 80L : null);
             assertThat(ended.get(1).attemptNo()).isEqualTo(2);
             assertThat(ended.get(1).retryOfObservationId()).isEqualTo(ended.get(0).observationId());
             assertThat(ended.get(1).outcome()).isEqualTo("COMPLETED");
-            assertThat(ended.get(1).firstBusinessFrameAt()).isNotNull();
-            assertThat(observation.turns.context("run").firstBusinessFrameAt()).isNull();
+            assertThat(ended.get(1).firstBusinessFrameLatencyMs()).isEqualTo(120L);
+            assertThat(observation.turns.context("run").firstBusinessFrameLatencyMs())
+                    .isEqualTo(businessFailure ? 80L : 200L);
         }
+    }
+
+    @ParameterizedTest
+    @MethodSource("observedStreams")
+    void samplesOnlyReceivedBusinessFramesForTrace(String stream, boolean traceSampled,
+                                                   boolean observationSampled, String outcome) throws Exception {
+        try (var observation = new ObservationTestFixture();
+             var server = server(null, null, exchange -> {
+                 observation.advance(Duration.ofMillis(80));
+                 write(exchange, stream);
+             })) {
+            observation.start("run");
+            var client = client(server, properties(0));
+            client.setObservationSupport(observation.recorder);
+            var result = client.recognize(command(), MemoryContext.empty(), user(), "user-1",
+                    observation.turns.context("run")).blockLast(Duration.ofSeconds(5));
+            assertThat(result.type()).isEqualTo(IntentDecisionStreamFrame.Type.RESULT);
+            ObservationTestFixture.await(() -> observation.calls.stream().anyMatch(c -> "FINISHED".equals(c.status())));
+            assertThat(observation.calls).filteredOn(c -> "FINISHED".equals(c.status())).singleElement()
+                    .satisfies(c -> {
+                        assertThat(c.outcome()).isEqualTo(outcome);
+                        assertThat(c.firstBusinessFrameLatencyMs()).isEqualTo(observationSampled ? 80L : null);
+                    });
+            assertThat(observation.turns.context("run").firstBusinessFrameLatencyMs())
+                    .isEqualTo(traceSampled ? 80L : null);
+        }
+    }
+
+    private static Stream<Arguments> observedStreams() {
+        return Stream.of(
+                // EOF synthesizes a degraded result. Only a real process frame can supply the Trace sample.
+                Arguments.of("event: progress\ndata: {\"stage\":\"ES_SEARCHING\"}\n\n", true, false, "ERROR"),
+                Arguments.of("event: delta\ndata: {\"content\":\"fragment\"}\n\n", true, false, "ERROR"),
+                Arguments.of("""
+                        : ping
+
+                        event: progress
+                        data: {"stageMessage":"stage missing"}
+
+                        event: delta
+                        data: {"content":" "}
+
+                        event: progress
+                        data: invalid
+
+                        event: unknown
+                        data: {"stage":"ES_HIT"}
+
+                        """, false, false, "ERROR"),
+                Arguments.of("event: result\ndata: null\n\n", false, true, "ERROR"),
+                Arguments.of("event: result\ndata: {}\n\n", false, true, "ERROR"),
+                Arguments.of("event: result\ndata: invalid\n\n", false, false, "ERROR"),
+                Arguments.of(CLARIFY_RESULT, true, true, "WAITING_USER"));
     }
 
     @Test

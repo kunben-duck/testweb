@@ -97,9 +97,10 @@ WAIT和异步等待不结束Trace；最终完成、失败或取消结束Trace。
 - DomainAgent 问卷、引用、单独的 `cardUrl`、推荐问及其他卡片均跳过。混合卡片只检查标准化器保留的上述两类字段。异步回调与实时流使用同一分类器。
 - Relay 和本地事件的非空正文 delta/snapshot、业务卡片、引用都可触发两级首帧，包括本地生成的 Intent 澄清、模糊候选及问卷回答确认卡片。
 - 回答 Agent 的 `runtime.thinking` 也可触发整轮 Trace 首帧。DomainAgent 取结构化 `think` 帧中的 `thinkTitle` 或 `thinkContent`，以及 `<think>` 标签内的文本。Relay 取 `agent-reasoning` 的 `thought`、`thinking-content-update` 的 `content`、`thinking-operation-end` 或 `thinking-operation-finish` 的 `reasoning_content`。这些字段均要求非空白字符串。
-- Trace 取上述思考内容与原有业务帧中最先到达的有效帧。例如空开始帧在第 100 ms 到达、思考标题在第 300 ms 到达、首段正文在第 900 ms 到达，Trace 记 300 ms，单次调用的 Observation 在正文到达时按本次调用起点计时。
-- 两级采样都跳过空思考边界、仅有状态说明的 `state=THINKING`、Intent 思考、工具、心跳、进度、元数据、纯终态及带 `candidateSwitchReplay` 标记的历史回放。
-- Intent最终结果只计入自身Observation首帧，普通意图命中不计入Trace首帧。两级分类独立，不取各调用延迟的最小值。
+- 整轮 Trace 取意图服务和回答 Agent 最先到达的有效帧。直接调用回答 Agent 时，若空开始帧在第 100 ms 到达、思考标题在第 300 ms 到达、首段正文在第 900 ms 到达，Trace 记 300 ms，调用级 Observation 在正文到达时采样。
+- 意图客户端按接收顺序采样。流式 `progress` 只需非空白 `stage`，`delta` 需要非空白 `content`。流式 `result` 和阻塞响应中的路由结果、澄清请求、下游明确返回的业务失败也可触发 Trace 首帧。一次尝试已采样时，重试沿用整轮首帧。
+- 单次 Intent 调用的 Observation 仍在解析结果时采样。例如从根 Trace 起算，进度、文字和结果分别在第 80、200、500 ms 到达，Trace 记 80 ms，Observation 记本次调用开始至第 500 ms 的耗时。
+- 整轮 Trace 跳过本地意图启动提示、心跳、空帧、SSE `error`、HTTP 异常和本地合成的降级结果。回答 Agent 的空思考边界、纯状态说明、工具和进度也跳过。带 `candidateSwitchReplay` 标记的历史回放不参与首帧采样。
 - 首帧记录接收/接受事件时的采样，不代表数据库提交或前端已收到；没有可靠样本则为空，不虚构0。首帧不单独写SQL，随阶段/结束快照保存。
 - 首帧一旦采集不因续跑或后续输出重置。规则调整只影响后续采样，不回填旧记录，也不重新计算已持久化的首帧；自定义`FirstBusinessFrameClassifier`仍可替换默认策略。
 

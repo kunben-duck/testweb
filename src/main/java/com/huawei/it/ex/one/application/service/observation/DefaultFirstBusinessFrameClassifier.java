@@ -4,6 +4,7 @@
 
 package com.huawei.it.ex.one.application.service.observation;
 
+import com.huawei.it.ex.one.application.integration.intent.IntentDecisionStreamFrame;
 import com.huawei.it.ex.one.application.integration.observation.FirstBusinessFrameClassifier;
 import com.huawei.it.ex.one.domain.chat.ChatEvent;
 
@@ -14,6 +15,19 @@ import java.util.Map;
 /** 回答 Agent 的思考内容仅触发整轮 Trace 首帧。 */
 public final class DefaultFirstBusinessFrameClassifier implements FirstBusinessFrameClassifier {
     private static final Classification TURN_ONLY = new Classification(false, true);
+
+    @Override
+    public boolean isIntentProcessTurnFrame(IntentDecisionStreamFrame frame) {
+        if (frame == null || frame.type() == null) { return false; }
+        return switch (frame.type()) {
+            case PROGRESS -> text(frame.payload().get("stage"));
+            case DELTA -> text(frame.payload().get("content"));
+            case RESULT -> false;
+        };
+    }
+
+    @Override
+    public Classification classifyIntentResult() { return Classification.BUSINESS; }
 
     @Override
     public Classification classify(ChatEvent event) {

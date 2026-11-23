@@ -166,13 +166,12 @@ public class FinEurekaIntentStreamClient implements IntentDecisionStreamClient {
                     .bodyValue(wireMapper.toWireRequest(
                             context.command(), context.memory(), context.user(), context.userMessageId(),
                             context.preferenceCorrections()))
-                    .exchangeToFlux(response -> responseFrames(response, context));
+                    .exchangeToFlux(response -> responseFrames(response, context, observation));
             Flux<IntentDecisionStreamFrame> firstEventBound = responseFrames.timeout(
                     Mono.delay(properties.normalizedStreamFirstEventTimeout()), ignored -> Mono.never());
             return withTotalTimeout(firstEventBound)
                     .doOnNext(frame -> {
                         if (frame.type() == IntentDecisionStreamFrame.Type.RESULT) {
-                            observation.intentResult();
                             var result = frame.recognitionResult();
                             observation.outcome(result == null || result.status() == IntentRecognitionResult.Status.FAILED_OR_DEGRADED
                                     ? "ERROR" : result.waitingClarification() ? "WAITING_USER" : "COMPLETED");
@@ -180,7 +179,6 @@ public class FinEurekaIntentStreamClient implements IntentDecisionStreamClient {
                     })
                     .doOnError(error -> {
                         if (error instanceof RetryableIntentResultException retryable) {
-                            observation.intentResult();
                             observation.outcome(retryable.result().status() == IntentRecognitionResult.Status.FAILED_OR_DEGRADED
                                     ? "ERROR" : "COMPLETED");
                         } else {
@@ -203,8 +201,8 @@ public class FinEurekaIntentStreamClient implements IntentDecisionStreamClient {
                                 "IntentDecision stream authentication timeout")));
     }
 
-    private Flux<IntentDecisionStreamFrame> responseFrames(ClientResponse response,
-                                                           StreamAttemptContext context) {
+    private Flux<IntentDecisionStreamFrame> responseFrames(ClientResponse response, StreamAttemptContext context,
+                                                           AgentObservationRecorder.Scope observation) {
         if (response.statusCode().isError()) {
             int statusCode = response.statusCode().value();
             return response.releaseBody()
@@ -224,7 +222,12 @@ public class FinEurekaIntentStreamClient implements IntentDecisionStreamClient {
                 .doOnNext(this::logUnknownEvent)
                 .filter(this::knownBusinessEvent);
         Flux<IntentDecisionStreamFrame> mapped = businessFrames
-                .concatMap(event -> mapBusinessEvent(event, context, terminalSeen))
+                .concatMap(event -> mapBusinessEvent(event, context, terminalSeen, observation))
+                .doOnNext(frame -> {
+                    if (frame.type() != IntentDecisionStreamFrame.Type.RESULT) {
+                        observation.intentProcessFrame(frame);
+                    }
+                })
                 .concatWith(Mono.defer(() -> terminalSeen.get()
                         ? Mono.empty()
                         : Mono.error(new IntentStreamProtocolException(
@@ -244,7 +247,8 @@ public class FinEurekaIntentStreamClient implements IntentDecisionStreamClient {
 
     private Flux<IntentDecisionStreamFrame> mapBusinessEvent(ServerSentEvent<String> event,
                                                              StreamAttemptContext context,
-                                                             AtomicBoolean terminalSeen) {
+                                                             AtomicBoolean terminalSeen,
+                                                             AgentObservationRecorder.Scope observation) {
         String eventType = event.event();
         return switch (eventType) {
             case "progress" -> processFrame(event, context.attempt(), context.maxAttempts(), true)
@@ -255,7 +259,7 @@ public class FinEurekaIntentStreamClient implements IntentDecisionStreamClient {
                     .orElseGet(Flux::empty);
             case "result" -> {
                 terminalSeen.set(true);
-                yield resultFrame(event, context);
+                yield resultFrame(event, context, observation);
             }
             case "error" -> {
                 terminalSeen.set(true);
@@ -300,20 +304,24 @@ public class FinEurekaIntentStreamClient implements IntentDecisionStreamClient {
     }
 
     private Flux<IntentDecisionStreamFrame> resultFrame(ServerSentEvent<String> event,
-                                                        StreamAttemptContext context) {
+                                                        StreamAttemptContext context,
+                                                        AgentObservationRecorder.Scope observation) {
         try {
-            IntentRecognitionResult result = wireMapper.toRecognitionResult(parseData(event));
+            var decoded = wireMapper.decodeRecognitionResult(parseData(event));
+            IntentRecognitionResult result = decoded.result();
             if (result == null) {
                 return Flux.error(new IntentStreamProtocolException(
                         "IntentDecision result event did not produce a recognition result"));
             }
-            if (result.waitingClarification()) {
-                return Flux.just(IntentDecisionStreamFrame.result(
-                        result, context.attempt(), context.maxAttempts()));
-            }
             if (result.status() == IntentRecognitionResult.Status.FINAL && result.decision() == null) {
                 return Flux.error(new IntentStreamProtocolException(
                         "IntentDecision final result does not contain a decision"));
+            }
+            // 在当前 SSE 尝试内按解码顺序采样，真实业务失败也能先于后续重试进入 Trace。
+            observation.intentResult(decoded.receivedBusinessResult());
+            if (result.waitingClarification()) {
+                return Flux.just(IntentDecisionStreamFrame.result(
+                        result, context.attempt(), context.maxAttempts()));
             }
             IntentRetryContext retryContext = new IntentRetryContext(
                     context.command(), context.memory(), context.user(),

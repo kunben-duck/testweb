@@ -4,7 +4,9 @@
 
 package com.huawei.it.ex.one.application.service.observation;
 
+import com.huawei.it.ex.one.application.integration.intent.IntentDecisionStreamFrame;
 import com.huawei.it.ex.one.application.integration.observation.FirstBusinessFrameClassifier;
+import com.huawei.it.ex.one.application.integration.observation.FirstBusinessFrameClassifier.Classification;
 import com.huawei.it.ex.one.domain.chat.ChatEvent;
 import com.huawei.it.ex.one.domain.observation.AgentObservationContext;
 import com.huawei.it.ex.one.domain.observation.AgentObservationSnapshot;
@@ -111,11 +113,7 @@ public final class AgentObservationRecorder {
                 safe(() -> {
                     if (finished || event == null || event.payload() == null) { return; }
                     // 首帧策略可替换且失败开放，不能阻断独立的拒答/问卷结果识别。
-                    safe(() -> {
-                        var classification = recorder.classifier.classify(event);
-                        if (classification.observation()) { firstFrame(); }
-                        if (classification.turn()) { recorder.turns.sample(context.turn().runId(), false, null); }
-                    });
+                    safe(() -> sampleFirstFrame(recorder.classifier.classify(event), true));
                     Map<String, Object> payload = event.payload();
                     String session = text(payload.get("runtimeSessionId"));
                     if (session != null) { runtimeSessionId = session; }
@@ -179,14 +177,32 @@ public final class AgentObservationRecorder {
             }
         }
 
-        /** Intent最终结果只计入该调用首帧，不将普通路由结果当作问答首帧。 */
-        public void intentResult() {
+        public void intentProcessFrame(IntentDecisionStreamFrame frame) {
             if (context == null) { return; }
             synchronized (this) {
+                if (finished) { return; }
                 safe(() -> {
-                    if (recorder.classifier.classifyIntentResult().observation()) { firstFrame(); }
+                    if (recorder.classifier.isIntentProcessTurnFrame(frame)) {
+                        recorder.turns.sample(context.turn().runId(), false, null);
+                    }
                 });
             }
+        }
+
+        public void intentResult() { intentResult(true); }
+
+        /** 本地协议降级沿用调用级采样，只有下游业务结果才参与整轮首帧。 */
+        public void intentResult(boolean receivedBusinessResult) {
+            if (context == null) { return; }
+            synchronized (this) {
+                if (finished) { return; }
+                safe(() -> sampleFirstFrame(recorder.classifier.classifyIntentResult(), receivedBusinessResult));
+            }
+        }
+
+        private void sampleFirstFrame(Classification classification, boolean eligibleForTurn) {
+            if (classification.observation()) { firstFrame(); }
+            if (eligibleForTurn && classification.turn()) { recorder.turns.sample(context.turn().runId(), false, null); }
         }
 
         private void firstFrame() {

@@ -183,9 +183,9 @@ public class FinEurekaIntentService implements IntentService {
                     new AgentObservationRecorder.Target(
                             "INTENT", null, "RECOGNIZE", null, null), attempt.observationRef().get());
             attempt.observationRef().set(observation);
-            IntentRecognitionResult result = request.retrieve()
+            var result = request.retrieve()
                     .bodyToMono(JsonNode.class)
-                    .map(wireMapper::toRecognitionResult)
+                    .map(wireMapper::decodeRecognitionResult)
                     .timeout(properties.normalizedTimeout())
                     .blockOptional()
                     .orElse(null);
@@ -203,8 +203,9 @@ public class FinEurekaIntentService implements IntentService {
         }
     }
 
-    private IntentRecognitionResult observedResult(ChatCommand command, IntentRecognitionResult result,
-                                                     AgentObservationRecorder.Scope observation) {
+    private IntentRecognitionResult observedResult(ChatCommand command, IntentServiceWireMapper.DecodedResult decoded,
+                                                    AgentObservationRecorder.Scope observation) {
+        IntentRecognitionResult result = decoded == null ? null : decoded.result();
         if (result == null) {
             observation.outcome("ERROR");
             log.warn(SystemErrorLogEntry.builder(SystemErrorCode.INTENT_DECISION_EMPTY_RESPONSE,
@@ -214,7 +215,7 @@ public class FinEurekaIntentService implements IntentService {
                     .build());
             return IntentRecognitionResult.degraded(wireMapper.degraded("empty intent response"));
         }
-        observation.intentResult();
+        observation.intentResult(decoded.receivedBusinessResult());
         observation.outcome(result.status() == IntentRecognitionResult.Status.FAILED_OR_DEGRADED
                 ? "ERROR" : result.waitingClarification() ? "WAITING_USER" : "COMPLETED");
         if (result.status() == IntentRecognitionResult.Status.FAILED_OR_DEGRADED) {

@@ -4,11 +4,15 @@
 
 package com.huawei.it.ex.one.application.integration.observation;
 
+import com.huawei.it.ex.one.application.integration.intent.IntentDecisionStreamFrame;
 import com.huawei.it.ex.one.domain.chat.ChatEvent;
 
 /** 两级首帧独立判定；实现不得改变或消费业务事件。 */
 public interface FirstBusinessFrameClassifier {
     Classification classify(ChatEvent event);
+
+    /** 仅在意图服务接收边界调用，旧策略默认跳过流式过程帧。 */
+    default boolean isIntentProcessTurnFrame(IntentDecisionStreamFrame frame) { return false; }
 
     default Classification classifyIntentResult() { return new Classification(true, false); }
 

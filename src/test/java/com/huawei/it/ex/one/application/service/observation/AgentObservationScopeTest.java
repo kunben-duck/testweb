@@ -15,6 +15,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import com.huawei.it.ex.one.application.integration.intent.IntentDecisionStreamFrame;
 import com.huawei.it.ex.one.application.integration.observation.FirstBusinessFrameClassifier;
 import com.huawei.it.ex.one.domain.chat.RuntimeEvent;
 import com.huawei.it.ex.one.domain.observation.TurnTraceContext;
@@ -190,11 +191,13 @@ class AgentObservationScopeTest {
     private enum NoopOrigin { DISABLED, MISSING_CONTEXT, FAILED_INITIALIZATION }
 
     private enum ScopeAction {
-        EVENT, INTENT_RESULT, OUTCOME, ERROR, FINISH;
+        EVENT, INTENT_PROCESS, INTENT_RESULT, OUTCOME, ERROR, FINISH;
 
         void invoke(AgentObservationRecorder.Scope scope) {
             switch (this) {
                 case EVENT -> scope.event(CARD);
+                case INTENT_PROCESS -> scope.intentProcessFrame(
+                        IntentDecisionStreamFrame.progress(Map.of("stage", "LLM_PROCESSING"), 1, 1));
                 case INTENT_RESULT -> scope.intentResult();
                 case OUTCOME -> scope.outcome("COMPLETED");
                 case ERROR -> scope.error(new IllegalArgumentException("test"));

@@ -154,7 +154,7 @@ class DomainAgentFirstBusinessFrameObservationTest {
     }
 
     @Test
-    void intentKeepsItsOwnFirstFrameWithoutSettingTurnFirstFrame() {
+    void intentResultSamplesBothLevelsWhenItIsTheFirstBusinessFrame() {
         try (var f = new ObservationTestFixture()) {
             f.start("run-a");
             var scope = f.recorder.begin(f.turns.context("run-a"),
@@ -166,7 +166,7 @@ class DomainAgentFirstBusinessFrameObservationTest {
             await(() -> f.calls.stream().anyMatch(call -> "FINISHED".equals(call.status())));
             assertThat(f.calls).filteredOn(call -> "FINISHED".equals(call.status())).singleElement()
                     .satisfies(call -> assertThat(call.firstBusinessFrameLatencyMs()).isEqualTo(15));
-            assertThat(f.turns.context("run-a").firstBusinessFrameAt()).isNull();
+            assertThat(f.turns.context("run-a").firstBusinessFrameLatencyMs()).isEqualTo(15);
             f.turns.finishStart("run-a");
         }
     }

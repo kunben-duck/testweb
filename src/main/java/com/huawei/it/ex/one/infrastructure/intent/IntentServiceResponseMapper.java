@@ -91,18 +91,11 @@ public class IntentServiceResponseMapper {
         if (root == null || root.isNull() || root.isMissingNode()) {
             return IntentRecognitionResult.degraded(degraded("empty intent response"));
         }
-        if (root.hasNonNull("code") && root.path("code").asInt(200) != 200) {
-            return IntentRecognitionResult.degraded(intentError(root, "intent response code is not 200"));
-        }
-        String rootStatus = text(root.path("status"));
-        if (rootStatus != null && !"success".equalsIgnoreCase(rootStatus)) {
-            return IntentRecognitionResult.degraded(intentError(root, "intent response status is not success"));
+        String failureReason = remoteFailureReason(root);
+        if (failureReason != null) {
+            return IntentRecognitionResult.degraded(intentError(root, failureReason));
         }
         JsonNode data = root.path("data");
-        String status = text(data.path("status"));
-        if (status != null && !"success".equalsIgnoreCase(status)) {
-            return IntentRecognitionResult.degraded(intentError(root, "intent response status is not success"));
-        }
         JsonNode result = data.path("result");
         String routeAction = text(result.path("routeAction"));
         if ("CLARIFY".equalsIgnoreCase(routeAction)) {
@@ -134,6 +127,30 @@ public class IntentServiceResponseMapper {
         // 新意图服务以 routeAction 作为唯一裁决字段。缺失时不再按 items/confidence 猜测 DomainAgent。
         return IntentRecognitionResult.degraded(protocolError(root, result, null,
                 routeAction == null ? "routeAction missing" : "unknown routeAction: " + routeAction));
+    }
+
+    boolean receivedBusinessResult(JsonNode root, IntentRecognitionResult result) {
+        if (result == null || root == null || !root.isObject() || root.isEmpty()) {
+            return false;
+        }
+        return switch (result.status()) {
+            case FINAL -> result.decision() != null;
+            case WAITING_CLARIFICATION -> true;
+            case FAILED_OR_DEGRADED -> remoteFailureReason(root) != null;
+        };
+    }
+
+    private String remoteFailureReason(JsonNode root) {
+        if (root.hasNonNull("code") && root.path("code").asInt(200) != 200) {
+            return "intent response code is not 200";
+        }
+        String rootStatus = text(root.path("status"));
+        String dataStatus = text(root.path("data").path("status"));
+        if ((rootStatus != null && !"success".equalsIgnoreCase(rootStatus))
+                || (dataStatus != null && !"success".equalsIgnoreCase(dataStatus))) {
+            return "intent response status is not success";
+        }
+        return null;
     }
 
     private IntentRecognitionResult captureAmbiguousResponse(JsonNode root, JsonNode result,

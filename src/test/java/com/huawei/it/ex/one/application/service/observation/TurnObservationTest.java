@@ -8,6 +8,7 @@ import static com.huawei.it.ex.one.application.service.observation.ObservationTe
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.huawei.it.ex.one.application.integration.intent.IntentDecisionStreamFrame;
 import com.huawei.it.ex.one.domain.auth.UserContext;
 import com.huawei.it.ex.one.domain.chat.ChatInteractionRequest;
 import com.huawei.it.ex.one.domain.chat.ChatInteractionStatus;
@@ -27,12 +28,15 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
 class TurnObservationTest {
+    private static final AgentObservationRecorder.Target INTENT = new AgentObservationRecorder.Target(
+            "INTENT", null, "RECOGNIZE", null, null);
     private final AgentObservationRecorder.Target domain = new AgentObservationRecorder.Target(
             "DOMAIN_AGENT", null, "QUERY", "skill-a", "real-downstream-session");
 
@@ -275,11 +279,62 @@ class TurnObservationTest {
     }
 
     @Test
+    void intentDeltaWithoutResultSamplesOnlyTheTrace() {
+        try (var f = new ObservationTestFixture()) {
+            f.start("run-a");
+            var intent = f.recorder.begin(f.turns.context("run-a"), INTENT);
+            f.advance(Duration.ofMillis(200));
+            intent.intentProcessFrame(IntentDecisionStreamFrame.delta(Map.of("content", "analysis"), 1, 1));
+            intent.finish(SignalType.CANCEL);
+            assertThat(f.turns.context("run-a").firstBusinessFrameLatencyMs()).isEqualTo(200);
+            await(() -> f.calls.size() == 2);
+            assertThat(f.calls.getLast().firstBusinessFrameAt()).isNull();
+            assertThat(f.calls.getLast().firstBusinessFrameLatencyMs()).isNull();
+            f.turns.finishStart("run-a");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void intentProgressSamplesTraceAtReceiptUnlessAnAnswerAgentSampledItFirst(boolean agentFirst) {
+        try (var f = new ObservationTestFixture()) {
+            ChatRun run = f.start("run-a");
+            Instant started = f.clock.instant();
+            var intent = f.recorder.begin(f.turns.context("run-a"), INTENT);
+            f.advance(Duration.ofMillis(20));
+            if (agentFirst) {
+                f.turns.event(RuntimeEvent.thinking("run-a", "session", Map.of(
+                        "source", "domain-agent", "sourceType", "think", "thinkTitle", "analysis")));
+            }
+            f.advance(Duration.ofMillis(60));
+            intent.intentProcessFrame(IntentDecisionStreamFrame.progress(Map.of("stage", "LLM_PROCESSING"), 1, 1));
+            long firstLatency = agentFirst ? 20 : 80;
+            assertThat(f.turns.context("run-a").firstBusinessFrameLatencyMs()).isEqualTo(firstLatency);
+            f.advance(Duration.ofMillis(120));
+            intent.intentProcessFrame(IntentDecisionStreamFrame.delta(Map.of("content", "analysis"), 1, 1));
+            f.advance(Duration.ofMillis(300));
+            intent.intentResult();
+            intent.finish(SignalType.ON_COMPLETE);
+            f.turns.committed(f.turns.decorate(run.completed(4)), null);
+            f.turns.finishStart("run-a");
+            await(() -> f.calls.size() == 2 && f.traces.stream().anyMatch(t -> "COMPLETED".equals(t.status())));
+            var trace = f.traces.getLast();
+            assertThat(trace.firstBusinessFrameAt()).isEqualTo(started.plusMillis(firstLatency));
+            assertThat(trace.firstBusinessFrameLatencyMs()).isEqualTo(firstLatency);
+            var call = f.calls.getLast();
+            assertThat(call.firstBusinessFrameAt()).isEqualTo(started.plusMillis(500));
+            assertThat(call.firstBusinessFrameLatencyMs()).isEqualTo(500);
+        }
+    }
+
+    @Test
     void classifierFailureDoesNotLoseRefusalAndIntentResultDoesNotSetTraceFirstFrame() {
         try (var f = new ObservationTestFixture(true, event -> { throw new IllegalStateException("classifier"); })) {
             f.start("run-a");
-            var intent = f.recorder.begin(f.turns.context("run-a"),
-                    new AgentObservationRecorder.Target("INTENT", null, "RECOGNIZE", null, null));
+            var intent = f.recorder.begin(f.turns.context("run-a"), INTENT);
+            intent.intentProcessFrame(IntentDecisionStreamFrame.progress(Map.of("stage", "LLM_PROCESSING"), 1, 1));
+            intent.intentProcessFrame(IntentDecisionStreamFrame.delta(Map.of("content", "analysis"), 1, 1));
+            f.advance(Duration.ofMillis(40));
             intent.intentResult();
             intent.outcome("COMPLETED");
             intent.finish(SignalType.ON_COMPLETE);
@@ -288,6 +343,7 @@ class TurnObservationTest {
             agent.event(RuntimeEvent.metadata("run-a", "session", Map.of("sourceType", "agent.refusal")));
             agent.finish(SignalType.CANCEL);
             await(() -> f.calls.size() == 4);
+            assertThat(f.calls.get(1).firstBusinessFrameLatencyMs()).isEqualTo(40);
             assertThat(f.calls.getLast().outcome()).isEqualTo("REJECTED");
             assertThat(f.turns.context("run-a").refusal()).isTrue();
         }

@@ -6,6 +6,7 @@ package com.huawei.it.ex.one.application.service.observation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.huawei.it.ex.one.application.integration.intent.IntentDecisionStreamFrame;
 import com.huawei.it.ex.one.application.integration.observation.FirstBusinessFrameClassifier.Classification;
 import com.huawei.it.ex.one.domain.chat.ChatEvent;
 import com.huawei.it.ex.one.domain.chat.MessageDeltaEvent;
@@ -174,7 +175,7 @@ class DefaultFirstBusinessFrameClassifierTest {
     }
 
     @Test
-    void existingNonDomainSourcesAndIntentResultRemainUnchanged() {
+    void nonDomainOutputsKeepTheirClassificationAndIntentSamplesAtTheClient() {
         for (String source : List.of("relay", "chatservice", "intent-agent")) {
             assertThat(classifier.classify(RuntimeEvent.card("run", "session",
                     Map.of("source", source, "sourceType", "approval-request"))))
@@ -192,8 +193,26 @@ class DefaultFirstBusinessFrameClassifierTest {
         assertThat(classifier.classify(RuntimeEvent.thinking("run", "session",
                 Map.of("source", "intent-agent", "sourceType", "intent-delta", "text", "analysis"))))
                 .isEqualTo(Classification.NONE);
-        assertThat(classifier.classifyIntentResult()).isEqualTo(new Classification(true, false));
+        for (String type : List.of("intent-start", "intent-progress")) {
+            assertThat(classifier.classify(RuntimeEvent.progress("run", "session",
+                    Map.of("source", "intent-agent", "sourceType", type, "stage", "LLM_PROCESSING"))))
+                    .isEqualTo(Classification.NONE);
+        }
+        assertThat(classifier.classifyIntentResult()).isEqualTo(Classification.BUSINESS);
         assertThat(classifier.classify(null)).isEqualTo(Classification.NONE);
+    }
+
+    @Test
+    void intentProcessFramesRequireAStageOrDeltaText() {
+        var invalid = List.of(
+                IntentDecisionStreamFrame.progress(Map.of("stageMessage", "description"), 1, 1),
+                IntentDecisionStreamFrame.progress(Map.of("stage", " "), 1, 1),
+                IntentDecisionStreamFrame.delta(Map.of("index", 1), 1, 1),
+                IntentDecisionStreamFrame.delta(Map.of("content", " "), 1, 1),
+                IntentDecisionStreamFrame.delta(Map.of("content", 5), 1, 1),
+                IntentDecisionStreamFrame.result(null, 1, 1));
+        assertThat(invalid).allSatisfy(frame ->
+                assertThat(classifier.isIntentProcessTurnFrame(frame)).isFalse());
     }
 
     @Test

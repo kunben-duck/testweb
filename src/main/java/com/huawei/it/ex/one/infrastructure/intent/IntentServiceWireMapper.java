@@ -77,6 +77,14 @@ public class IntentServiceWireMapper {
         return responseMapper.toRecognitionResult(root);
     }
 
+    /** 保留映射后的路由语义，同时标记下游实际返回的业务结果。 */
+    DecodedResult decodeRecognitionResult(JsonNode root) {
+        IntentRecognitionResult result = toRecognitionResult(root);
+        return new DecodedResult(result, responseMapper.receivedBusinessResult(root, result));
+    }
+
+    record DecodedResult(IntentRecognitionResult result, boolean receivedBusinessResult) { }
+
     /**
      * 构造意图服务不可用时的降级决策。
      *

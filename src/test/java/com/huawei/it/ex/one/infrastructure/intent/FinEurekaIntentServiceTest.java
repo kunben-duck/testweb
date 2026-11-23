@@ -12,6 +12,7 @@ import com.huawei.it.ex.one.application.integration.intent.IntentRetryContext;
 import com.huawei.it.ex.one.application.integration.intent.IntentRetryPolicy;
 import com.huawei.it.ex.one.application.integration.intent.IntentUserPreferenceCorrection;
 import com.huawei.it.ex.one.application.service.auth.AuthHeaderProviderRegistry;
+import com.huawei.it.ex.one.application.service.observation.ObservationTestFixture;
 import com.huawei.it.ex.one.domain.auth.UserContext;
 import com.huawei.it.ex.one.domain.chat.ChatCommand;
 import com.huawei.it.ex.one.domain.chat.ChatRunMode;
@@ -24,17 +25,22 @@ import com.huawei.it.ex.one.infrastructure.auth.SgovAuthHeaderProvider;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import reactor.core.publisher.Mono;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.reactive.function.client.ClientRequest;
+import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -128,39 +134,89 @@ class FinEurekaIntentServiceTest {
     }
 
     @Test
-    void blockingAttemptsAreObservedButDoNotPropagateHeaders() throws Exception {
+    void firstRemoteBusinessFailureSamplesTraceAndRetryKeepsItsOwnObservation() {
         AtomicInteger attempts = new AtomicInteger();
-        List<org.springframework.web.reactive.function.client.ClientRequest> captured = new CopyOnWriteArrayList<>();
-        var properties = new IntentServiceHttpProperties();
-        properties.setBaseUrl("http://intent.test");
-        properties.setAccessName("entry");
-        properties.setMaxRetries(1);
-        var mapper = new IntentServiceWireMapper(new IntentServiceRequestMapper(properties),
-                new IntentServiceResponseMapper(objectMapper, properties));
-        var headers = new AuthHeaderProviderRegistry(new IntegrationAuthProperties(), List.of(new NoopAuthHeaderProvider()));
-        WebClient.Builder web = WebClient.builder().exchangeFunction(request -> {
-            captured.add(request);
-            String response = attempts.incrementAndGet() == 1
-                    ? "{\"code\":500,\"data\":{\"status\":\"failed\"}}"
-                    : "{\"code\":200,\"data\":{\"status\":\"success\",\"result\":{\"routeAction\":\"ROUTE_SINGLE\","
-                    + "\"items\":[{\"intentId\":\"ok\",\"intentName\":\"OK\",\"accessName\":\"skill-ok\"}]}}}";
-            return reactor.core.publisher.Mono.just(org.springframework.web.reactive.function.client.ClientResponse
-                    .create(org.springframework.http.HttpStatus.OK).header("Content-Type", "application/json")
-                    .body(response).build());
-        });
-        try (var f = new com.huawei.it.ex.one.application.service.observation.ObservationTestFixture()) {
+        List<ClientRequest> captured = new CopyOnWriteArrayList<>();
+        try (var f = new ObservationTestFixture()) {
             f.start("run");
-            var service = new FinEurekaIntentService(web, properties, mapper, headers, new DefaultIntentRetryPolicy());
+            f.advance(Duration.ofMillis(20));
+            var service = blockingService(WebClient.builder().exchangeFunction(request -> {
+                captured.add(request);
+                f.advance(Duration.ofMillis(30));
+                String response = attempts.incrementAndGet() == 1
+                        ? "{\"code\":500,\"data\":{\"status\":\"failed\"}}"
+                        : "{\"code\":200,\"data\":{\"status\":\"success\",\"result\":{\"routeAction\":\"ROUTE_SINGLE\","
+                        + "\"items\":[{\"intentId\":\"ok\",\"intentName\":\"OK\",\"accessName\":\"skill-ok\"}]}}}";
+                return jsonResponse(200, response);
+            }), 1);
             service.setObservationSupport(f.recorder);
             var result = service.recognizeForRouting(command(), MemoryContext.empty(), user(), "user-1",
                     f.turns.context("run"));
             assertThat(result.decision().intentCode()).isEqualTo("ok");
-            com.huawei.it.ex.one.application.service.observation.ObservationTestFixture.await(() -> f.calls.size() == 4);
+            ObservationTestFixture.await(() -> f.calls.size() == 4);
             assertThat(captured).hasSize(2).allSatisfy(request -> assertThat(request.headers())
                     .doesNotContainKeys("X-Trace-Id", "X-Observation-Id"));
-            assertThat(f.calls.getLast().attemptNo()).isEqualTo(2);
-            assertThat(f.calls.getLast().outcome()).isEqualTo("COMPLETED");
+            var finished = f.calls.stream().filter(call -> "FINISHED".equals(call.status()))
+                    .sorted(java.util.Comparator.comparingInt(call -> call.attemptNo())).toList();
+            assertThat(finished).hasSize(2);
+            assertThat(finished.getFirst().outcome()).isEqualTo("ERROR");
+            assertThat(finished.getLast().outcome()).isEqualTo("COMPLETED");
+            assertThat(finished.getLast().attemptNo()).isEqualTo(2);
+            assertThat(finished.getLast().retryOfObservationId()).isEqualTo(finished.getFirst().observationId());
+            assertThat(finished).allSatisfy(call -> assertThat(call.firstBusinessFrameLatencyMs()).isEqualTo(30));
+            assertThat(f.turns.context("run").firstBusinessFrameAt()).isEqualTo(finished.getFirst().firstBusinessFrameAt());
+            assertThat(f.turns.context("run").firstBusinessFrameLatencyMs()).isEqualTo(50);
         }
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', textBlock = """
+            200 | {"data":{"result":{"routeAction":"NO_MATCH"}}}      | FINAL                 | true  | true
+            200 | {"data":{"result":{"routeAction":"CLARIFY"}}}       | WAITING_CLARIFICATION | true  | true
+            200 | {"status":"failed"}                                | FAILED_OR_DEGRADED    | true  | true
+            200 | {"data":{"status":"failed"}}                       | FAILED_OR_DEGRADED    | true  | true
+            200 | {}                                                 | FAILED_OR_DEGRADED    | false | true
+            200 | 42                                                 | FAILED_OR_DEGRADED    | false | true
+            200 | {"data":{"result":{"routeAction":"ROUTE_SINGLE"}}} | FAILED_OR_DEGRADED    | false | true
+            200 | {                                                  | FAILED_OR_DEGRADED    | false | false
+            200 | ''                                                 | FAILED_OR_DEGRADED    | false | false
+            503 | {"code":503}                                       | FAILED_OR_DEGRADED    | false | false
+            """)
+    void onlyReceivedBusinessResultsSampleBlockingTrace(int httpStatus, String body, IntentRecognitionResult.Status status,
+                                                         boolean traceSample, boolean observationSample) {
+        try (var f = new ObservationTestFixture()) {
+            f.start("run");
+            f.advance(Duration.ofMillis(20));
+            var service = blockingService(WebClient.builder().exchangeFunction(request -> {
+                f.advance(Duration.ofMillis(30));
+                return jsonResponse(httpStatus, body);
+            }), 0);
+            service.setObservationSupport(f.recorder);
+            var result = service.recognizeForRouting(command(), MemoryContext.empty(), user(), "user-1",
+                    f.turns.context("run"));
+            assertThat(result.status()).isEqualTo(status);
+            var trace = f.turns.context("run");
+            assertThat(trace.firstBusinessFrameAt()).isEqualTo(traceSample ? f.clock.instant() : null);
+            assertThat(trace.firstBusinessFrameLatencyMs()).isEqualTo(traceSample ? 50L : null);
+            ObservationTestFixture.await(() -> f.calls.stream().anyMatch(call -> "FINISHED".equals(call.status())));
+            assertThat(f.calls).filteredOn(call -> "FINISHED".equals(call.status())).singleElement().satisfies(call -> {
+                assertThat(call.firstBusinessFrameAt()).isEqualTo(observationSample ? f.clock.instant() : null);
+                assertThat(call.firstBusinessFrameLatencyMs()).isEqualTo(observationSample ? 30L : null);
+            });
+        }
+    }
+
+    private FinEurekaIntentService blockingService(WebClient.Builder web, int maxRetries) {
+        var properties = new IntentServiceHttpProperties();
+        properties.setBaseUrl("http://intent.test");
+        properties.setMaxRetries(maxRetries);
+        var headers = new AuthHeaderProviderRegistry(new IntegrationAuthProperties(), List.of(new NoopAuthHeaderProvider()));
+        return new FinEurekaIntentService(web, properties, wireMapper(), headers, new DefaultIntentRetryPolicy());
+    }
+
+    private Mono<ClientResponse> jsonResponse(int status, String body) {
+        return Mono.just(ClientResponse.create(HttpStatus.valueOf(status))
+                .header("Content-Type", "application/json").body(body).build());
     }
 
     @Test
