@@ -13,6 +13,8 @@ import static org.mockito.Mockito.when;
 import com.huawei.it.ex.one.domain.chat.ChatInteractionRequest;
 import com.huawei.it.ex.one.domain.chat.ChatInteractionStatus;
 import com.huawei.it.ex.one.domain.chat.ChatInteractionType;
+import com.huawei.it.ex.one.domain.chat.MessageDeltaEvent;
+import com.huawei.it.ex.one.domain.chat.RuntimeEvent;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -25,6 +27,37 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 class TurnTraceContinuationLifecycleTest {
+    @Test
+    void continuedAnswerPreservesThinkingSampleFromWaitingRun() {
+        try (var f = new ObservationTestFixture()) {
+            var root = f.start("run-a");
+            f.advance(Duration.ofMillis(300));
+            var thinkingAt = f.clock.instant();
+            f.turns.event(RuntimeEvent.thinking("run-a", "session", Map.of(
+                    "source", "domain-agent", "sourceType", "content.think", "status", "STREAMING", "text", "分析问题")));
+            var request = interaction(f.turns.interactionMetadata("run-a", Map.of()));
+            f.turns.committed(f.turns.decorate(root.waitingUser(2)), null);
+            f.turns.finishStart("run-a");
+
+            f.advance(Duration.ofSeconds(5));
+            f.turns.prepareContinuation("run-b");
+            f.turns.inherit(request, "run-b");
+            var next = f.turns.decorate(f.run("run-b", "continued-user", Map.of()));
+            f.turns.committed(next, null);
+            f.turns.event(MessageDeltaEvent.of("run-b", "session", "answer"));
+            f.turns.committed(f.turns.decorate(next.completed(6)), null);
+            f.turns.finishStart("run-b");
+            await(() -> f.traces.stream().anyMatch(trace -> "COMPLETED".equals(trace.status())));
+            assertThat(f.traces).filteredOn(trace -> "COMPLETED".equals(trace.status())).singleElement()
+                    .satisfies(trace -> {
+                        assertThat(trace.rootRunId()).isEqualTo("run-a");
+                        assertThat(trace.currentRunId()).isEqualTo("run-b");
+                        assertThat(trace.firstBusinessFrameAt()).isEqualTo(thinkingAt);
+                        assertThat(trace.firstBusinessFrameLatencyMs()).isEqualTo(300);
+                    });
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void endedContinuationCannotBeInitializedLater(boolean legacy) throws Exception {

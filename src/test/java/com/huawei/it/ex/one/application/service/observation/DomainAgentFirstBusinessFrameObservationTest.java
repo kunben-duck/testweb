@@ -24,6 +24,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
+import java.time.Instant;
 
 class DomainAgentFirstBusinessFrameObservationTest {
     private final DomainAgentResponseNormalizer normalizer = new DomainAgentResponseNormalizer(new ObjectMapper());
@@ -32,7 +33,7 @@ class DomainAgentFirstBusinessFrameObservationTest {
     private static final String EXCLUDED = """
             data: {"cardUrl":"web.js"}
 
-            data: {"content":"<think>analysis</think>"}
+            data: {"content":"<think>  </think>"}
 
             data: {"type":"tool","toolTitle":"search"}
 
@@ -64,7 +65,7 @@ class DomainAgentFirstBusinessFrameObservationTest {
             assertThat(first.firstBusinessFrameLatencyMs()).isEqualTo(120);
             assertThat(first.retainText()).isEqualTo(!noStore);
             f.advance(Duration.ofMillis(80));
-            emit(f, scope, "{\"content\":\"later answer\",\"endFlag\":true}");
+            emit(f, scope, "{\"content\":\"<think>more analysis</think>later answer\",\"endFlag\":true}");
             scope.finish(SignalType.ON_COMPLETE);
             f.turns.committed(f.turns.decorate(run.completed(9)), null);
             f.turns.finishStart("run-a");
@@ -81,6 +82,45 @@ class DomainAgentFirstBusinessFrameObservationTest {
                         assertThat(trace.firstBusinessFrameAt()).isEqualTo(first.firstBusinessFrameAt());
                         assertThat(trace.firstBusinessFrameLatencyMs()).isEqualTo(120);
                         assertThat(trace.durationMs()).isEqualTo(200);
+                    });
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void thinkingSamplesTraceWhileDomainObservationWaitsForBusinessOutput(boolean answerFollows) {
+        try (var f = new ObservationTestFixture()) {
+            ChatRun run = f.start("run-a");
+            f.advance(Duration.ofMillis(20));
+            var scope = f.recorder.begin(f.turns.context("run-a"), target);
+            f.advance(Duration.ofMillis(80));
+            emit(f, scope, "{\"type\":\"think\",\"thinkState\":\"start\"}");
+            assertThat(f.turns.context("run-a").firstBusinessFrameAt()).isNull();
+            f.advance(Duration.ofMillis(200));
+            Instant thinkingAt = f.clock.instant();
+            emit(f, scope, "{\"type\":\"think\",\"thinkTitle\":\"分析问题\"}");
+            assertThat(f.turns.context("run-a").firstBusinessFrameAt()).isEqualTo(thinkingAt);
+
+            f.advance(Duration.ofMillis(600));
+            Instant answerAt = f.clock.instant();
+            if (answerFollows) {
+                emit(f, scope, "{\"content\":\"answer\"}");
+            }
+            emit(f, scope, "{\"endFlag\":true}");
+            scope.finish(SignalType.ON_COMPLETE);
+            f.turns.committed(f.turns.decorate(run.completed(9)), null);
+            f.turns.finishStart("run-a");
+            await(() -> f.calls.stream().anyMatch(call -> "FINISHED".equals(call.status())));
+            await(() -> f.traces.stream().anyMatch(trace -> "COMPLETED".equals(trace.status())));
+            assertThat(f.traces).filteredOn(trace -> "COMPLETED".equals(trace.status())).singleElement()
+                    .satisfies(trace -> {
+                        assertThat(trace.firstBusinessFrameAt()).isEqualTo(thinkingAt);
+                        assertThat(trace.firstBusinessFrameLatencyMs()).isEqualTo(300);
+                    });
+            assertThat(f.calls).filteredOn(call -> "FINISHED".equals(call.status())).singleElement()
+                    .satisfies(call -> {
+                        assertThat(call.firstBusinessFrameAt()).isEqualTo(answerFollows ? answerAt : null);
+                        assertThat(call.firstBusinessFrameLatencyMs()).isEqualTo(answerFollows ? 880L : null);
                     });
         }
     }

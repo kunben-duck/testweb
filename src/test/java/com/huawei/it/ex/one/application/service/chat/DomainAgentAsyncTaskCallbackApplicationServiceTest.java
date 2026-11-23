@@ -212,9 +212,16 @@ class DomainAgentAsyncTaskCallbackApplicationServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"content,true", "diyCardScene,true", "contentAgent,true", "cardUrl,false", "openCard,false"})
-    void callbackUsesDomainFirstFrameRulesWithoutDroppingOtherBusinessResults(String field, boolean firstFrame)
-            throws Exception {
+    @CsvSource(delimiter = '|', textBlock = """
+            {"content":"answer"}                     | true  | true
+            {"diyCardScene":"scene"}                 | true  | true
+            {"contentAgent":"answer"}                | true  | true
+            {"cardUrl":"web.js"}                     | false | false
+            {"openCard":"value"}                     | false | false
+            {"type":"think","thinkTitle":"正在分析"} | true  | false
+            """)
+    void callbackUsesDomainFirstFrameRulesWithoutDroppingOtherBusinessResults(
+            String frame, boolean traceFirstFrame, boolean callFirstFrame) throws Exception {
         try (var observation = new ObservationTestFixture()) {
             ChatRun base = asyncRun();
             observation.turns.begin(new UserContext(base.tenantId(), base.userId(), base.userId()),
@@ -228,8 +235,9 @@ class DomainAgentAsyncTaskCallbackApplicationServiceTest {
             var commits = mock(DomainAgentAsyncTaskCallbackCommitService.class);
             when(commits.commit(any())).thenAnswer(invocation -> {
                 var trace = observation.turns.context(base.id());
-                assertThat(trace.firstBusinessFrameAt() != null).isEqualTo(firstFrame);
-                assertThat(trace.firstBusinessFrameLatencyMs()).isEqualTo(firstFrame ? 1000L : null);
+                assertThat(trace.firstBusinessFrameAt())
+                        .isEqualTo(traceFirstFrame ? observation.clock.instant() : null);
+                assertThat(trace.firstBusinessFrameLatencyMs()).isEqualTo(traceFirstFrame ? 1000L : null);
                 DomainAgentAsyncTaskCallbackCommitService.PreparedCallback prepared = invocation.getArgument(0);
                 assertThat(prepared.resultProvided()).isTrue();
                 assertThat(prepared.businessEvents()).hasSize(1);
@@ -242,7 +250,7 @@ class DomainAgentAsyncTaskCallbackApplicationServiceTest {
             service.setAgentObservationSupport(observation.recorder);
             try {
                 var result = service.callback(new DomainAgentAsyncTaskCallbackCommand(base.id(), "COMPLETED", "APPEND",
-                        List.of(new ObjectMapper().readTree("{\"" + field + "\":\"value\"}")), null))
+                        List.of(new ObjectMapper().readTree(frame)), null))
                         .block(Duration.ofSeconds(5));
                 assertThat(result).isNotNull();
                 assertThat(result.accepted()).isTrue();
@@ -251,8 +259,9 @@ class DomainAgentAsyncTaskCallbackApplicationServiceTest {
                 assertThat(observation.calls).filteredOn(call -> "FINISHED".equals(call.status())).singleElement()
                         .satisfies(call -> {
                             assertThat(call.outcome()).isEqualTo("CALLBACK_APPLIED");
-                            assertThat(call.firstBusinessFrameAt() != null).isEqualTo(firstFrame);
-                            assertThat(call.firstBusinessFrameLatencyMs()).isEqualTo(firstFrame ? 0L : null);
+                            assertThat(call.firstBusinessFrameAt())
+                                    .isEqualTo(callFirstFrame ? observation.clock.instant() : null);
+                            assertThat(call.firstBusinessFrameLatencyMs()).isEqualTo(callFirstFrame ? 0L : null);
                         });
                 assertThat(observation.turns.context(base.id())).isNull();
             } finally { service.closeScheduler(); }

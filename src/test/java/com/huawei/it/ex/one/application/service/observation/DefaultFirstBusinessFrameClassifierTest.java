@@ -13,6 +13,7 @@ import com.huawei.it.ex.one.domain.chat.MessageSnapshotEvent;
 import com.huawei.it.ex.one.domain.chat.RuntimeEvent;
 import com.huawei.it.ex.one.domain.chat.StoredChatEvent;
 import com.huawei.it.ex.one.infrastructure.runtime.domainagent.DomainAgentResponseNormalizer;
+import com.huawei.it.ex.one.infrastructure.runtime.relay.RelayRuntimeResponseNormalizer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -30,50 +31,90 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 class DefaultFirstBusinessFrameClassifierTest {
+    private static final Classification TRACE_ONLY = new Classification(false, true);
+
     private final DefaultFirstBusinessFrameClassifier classifier = new DefaultFirstBusinessFrameClassifier();
     private final DomainAgentResponseNormalizer normalizer = new DomainAgentResponseNormalizer(new ObjectMapper());
+    private final RelayRuntimeResponseNormalizer relayNormalizer =
+            new RelayRuntimeResponseNormalizer(new ObjectMapper());
 
     @ParameterizedTest
     @MethodSource("domainFrames")
-    void classifiesActualDomainAgentEventsWithoutChangingPayload(String frame, int count) {
+    void classifiesActualDomainAgentEventsWithoutChangingPayload(String frame, int observationCount, int traceCount) {
         List<ChatEvent> events = normalizer.normalize("run", "session", frame);
         List<Map<String, Object>> payloads = events.stream().<Map<String, Object>>map(
                 event -> new LinkedHashMap<>(event.payload())).toList();
-        assertThat(events.stream().filter(event -> classifier.classify(event).observation()).count()).isEqualTo(count);
-        assertThat(events.stream().filter(event -> classifier.classify(event).turn()).count()).isEqualTo(count);
+        var classifications = events.stream().map(classifier::classify).toList();
+        assertThat(classifications.stream().filter(Classification::observation).count()).isEqualTo(observationCount);
+        assertThat(classifications.stream().filter(Classification::turn).count()).isEqualTo(traceCount);
         assertThat(events.stream().map(ChatEvent::payload)).containsExactlyElementsOf(payloads);
     }
 
     private static Stream<Arguments> domainFrames() {
         return Stream.of(
-                Arguments.of("{\"content\":\"answer\"}", 1),
-                Arguments.of("{\"content\":\"<think>thinking</think>answer\"}", 1),
-                Arguments.of("{\"content\":\"<think>thinking</think>\"}", 0),
-                Arguments.of("{\"content\":\" \"}", 0),
-                Arguments.of("{\"content\":null}", 0),
-                Arguments.of("{\"cardUrl\":\"https://cards.test/card.js\"}", 0),
-                Arguments.of("{\"type\":\"recommended_questions\",\"recommendedQuestions\":[\"next\"]}", 0),
-                Arguments.of("{\"cardList\":[{\"text\":\"card\"}]}", 0),
-                Arguments.of("{\"specificSceneInfo\":[{\"type\":\"atMember\"}]}", 0),
-                Arguments.of("{\"openCard\":\"open\"}", 0),
-                Arguments.of("{\"searchList\":[{\"title\":\"document\"}]}", 0),
-                Arguments.of("{\"type\":\"think\",\"thinkContent\":\"thinking\"}", 0),
-                Arguments.of("{\"type\":\"tool\",\"toolTitle\":\"search\"}", 0),
-                Arguments.of("{\"type\":\"heartbeat\",\"content\":\"ignored\"}", 0),
-                Arguments.of("{\"sessionId\":\"downstream-session\"}", 0),
-                Arguments.of("{\"endFlag\":true}", 0),
+                Arguments.of("{\"content\":\"answer\"}", 1, 1),
+                Arguments.of("{\"content\":\"<think>thinking</think>answer\"}", 1, 2),
+                Arguments.of("{\"content\":\"<think>thinking</think>\"}", 0, 1),
+                Arguments.of("{\"content\":\" \"}", 0, 0),
+                Arguments.of("{\"content\":null}", 0, 0),
+                Arguments.of("{\"cardUrl\":\"https://cards.test/card.js\"}", 0, 0),
+                Arguments.of("{\"type\":\"recommended_questions\",\"recommendedQuestions\":[\"next\"]}", 0, 0),
+                Arguments.of("{\"cardList\":[{\"text\":\"card\"}]}", 0, 0),
+                Arguments.of("{\"specificSceneInfo\":[{\"type\":\"atMember\"}]}", 0, 0),
+                Arguments.of("{\"openCard\":\"open\"}", 0, 0),
+                Arguments.of("{\"searchList\":[{\"title\":\"document\"}]}", 0, 0),
+                Arguments.of("{\"type\":\"think\",\"thinkContent\":\"thinking\"}", 0, 1),
+                Arguments.of("{\"type\":\"think\",\"thinkTitle\":\"检查报销项目\"}", 0, 1),
+                Arguments.of("{\"type\":\"think\",\"thinkState\":\"start\",\"thinkTitle\":\"正在分析\"}", 0, 1),
+                Arguments.of("{\"type\":\"think\",\"thinkState\":\"stop\",\"thinkContent\":\"已完成分析\"}", 0, 1),
+                Arguments.of("{\"type\":\"think\",\"thinkState\":\"start\"}", 0, 0),
+                Arguments.of("{\"type\":\"think\",\"thinkState\":\"stop\",\"thinkTime\":\"3s\"}", 0, 0),
+                Arguments.of("{\"type\":\"think\",\"thinkState\":\"start\",\"thinkContent\":\" \",\"thinkTitle\":\" \"}", 0, 0),
+                Arguments.of("{\"type\":\"think\",\"thinkState\":\"start\",\"thinkContent\":{\"text\":\"nested\"}}", 0, 0),
+                Arguments.of("{\"content\":\"<think>   </think>\"}", 0, 0),
+                Arguments.of("{\"state\":\"THINKING\",\"stateDesc\":\"正在分析\"}", 0, 0),
+                Arguments.of("{\"type\":\"tool\",\"toolTitle\":\"search\"}", 0, 0),
+                Arguments.of("{\"type\":\"heartbeat\",\"content\":\"ignored\"}", 0, 0),
+                Arguments.of("{\"sessionId\":\"downstream-session\"}", 0, 0),
+                Arguments.of("{\"endFlag\":true}", 0, 0),
                 Arguments.of("{\"type\":\"approval-request\",\"operation_type\":\"questionnaire\","
-                        + "\"approval_id\":\"q1\",\"questions\":[{\"question\":\"Choose\"}]}", 0),
-                Arguments.of("{\"cardUrl\":\"web.js\",\"diyCardScene\":\"scene\",\"contentAgent\":[]}", 1),
-                Arguments.of("{\"cardUrl\":\"web.js\",\"diyCardScene\":[],\"contentAgent\":{\"text\":\"answer\"}}", 1),
-                Arguments.of("{\"cardUrl\":\"web.js\",\"diyCardScene\":[],\"contentAgent\":{}}", 0),
+                        + "\"approval_id\":\"q1\",\"questions\":[{\"question\":\"Choose\"}]}", 0, 0),
+                Arguments.of("{\"cardUrl\":\"web.js\",\"diyCardScene\":\"scene\",\"contentAgent\":[]}", 1, 1),
+                Arguments.of("{\"cardUrl\":\"web.js\",\"diyCardScene\":[],\"contentAgent\":{\"text\":\"answer\"}}", 1, 1),
+                Arguments.of("{\"cardUrl\":\"web.js\",\"diyCardScene\":[],\"contentAgent\":{}}", 0, 0),
                 // Existing normalization does not expose contentAgent alongside a standalone URL card.
-                Arguments.of("{\"cardUrl\":\"web.js\",\"contentAgent\":\"not emitted\"}", 0),
-                Arguments.of("{\"content\":\"answer\",\"cardUrl\":\"web.js\"}", 1),
-                Arguments.of("{\"diyCardScene\":\"scene\",\"contentAgent\":\"answer\"}", 1),
-                Arguments.of("{\"metadata\":{\"diyCardScene\":\"nested\"}}", 0),
-                Arguments.of("{\"DiyCardScene\":\"wrong case\",\"ContentAgent\":\"wrong case\"}", 0),
-                Arguments.of("{}", 0));
+                Arguments.of("{\"cardUrl\":\"web.js\",\"contentAgent\":\"not emitted\"}", 0, 0),
+                Arguments.of("{\"content\":\"answer\",\"cardUrl\":\"web.js\"}", 1, 1),
+                Arguments.of("{\"diyCardScene\":\"scene\",\"contentAgent\":\"answer\"}", 1, 1),
+                Arguments.of("{\"metadata\":{\"diyCardScene\":\"nested\"}}", 0, 0),
+                Arguments.of("{\"DiyCardScene\":\"wrong case\",\"ContentAgent\":\"wrong case\"}", 0, 0),
+                Arguments.of("{}", 0, 0));
+    }
+
+    @ParameterizedTest
+    @MethodSource("relayThinkingFrames")
+    void classifiesOnlyProtocolSpecificThinkingTextInRelayFrames(String frame, Classification expected) {
+        assertThat(relayNormalizer.normalize("run", "session", frame)).singleElement().satisfies(event -> {
+            assertThat(event.type()).isEqualTo("runtime.thinking");
+            assertThat(classifier.classify(event)).isEqualTo(expected);
+        });
+    }
+
+    private static Stream<Arguments> relayThinkingFrames() {
+        return Stream.of(
+                Arguments.of("{\"type\":\"agent-reasoning\",\"thought\":\"analysis\"}", TRACE_ONLY),
+                Arguments.of("{\"type\":\"thinking-content-update\",\"content\":\"fragment\"}", TRACE_ONLY),
+                Arguments.of("{\"type\":\"THINKING_CONTENT_UPDATE\",\"content\":\"fragment\"}", TRACE_ONLY),
+                Arguments.of("{\"type\":\"thinking—content—update\",\"content\":\"fragment\"}", TRACE_ONLY),
+                Arguments.of("{\"type\":\"thinking-operation-end\",\"reasoning_content\":\"summary\"}", TRACE_ONLY),
+                Arguments.of("{\"type\":\"thinking-operation-finish\",\"reasoning_content\":\"summary\"}", TRACE_ONLY),
+                Arguments.of("{\"type\":\"agent-reasoning\",\"is_start\":true,\"content\":\"status\"}", Classification.NONE),
+                Arguments.of("{\"type\":\"thinking-operation-start\",\"content\":\"status\"}", Classification.NONE),
+                Arguments.of("{\"type\":\"thinkink-operation-start\",\"operation_id\":\"op-1\"}", Classification.NONE),
+                Arguments.of("{\"type\":\"thinking-content-update\",\"content\":\" \"}", Classification.NONE),
+                Arguments.of("{\"type\":\"thinking-content-update\",\"content\":{\"text\":\"nested\"}}", Classification.NONE),
+                Arguments.of("{\"type\":\"thinking-operation-end\",\"content\":\"status\"}", Classification.NONE),
+                Arguments.of("{\"type\":\"thinking-operation-finish\",\"output\":\"answer\"}", Classification.NONE));
     }
 
     @ParameterizedTest
@@ -119,7 +160,7 @@ class DefaultFirstBusinessFrameClassifierTest {
         assertThat(events).extracting(ChatEvent::type).containsExactly(
                 "runtime.thinking", "runtime.thinking", "runtime.thinking", "runtime.card", "runtime.card", "message.delta");
         assertThat(events.stream().map(classifier::classify)).containsExactly(
-                Classification.NONE, Classification.NONE, Classification.NONE, Classification.NONE,
+                Classification.NONE, TRACE_ONLY, Classification.NONE, Classification.NONE,
                 Classification.BUSINESS, Classification.BUSINESS);
     }
 
@@ -148,14 +189,23 @@ class DefaultFirstBusinessFrameClassifierTest {
                 .isEqualTo(Classification.BUSINESS);
         assertThat(classifier.classify(RuntimeEvent.card("run", "session", Map.of("cardType", "clarification"))))
                 .isEqualTo(Classification.BUSINESS);
+        assertThat(classifier.classify(RuntimeEvent.thinking("run", "session",
+                Map.of("source", "intent-agent", "sourceType", "intent-delta", "text", "analysis"))))
+                .isEqualTo(Classification.NONE);
         assertThat(classifier.classifyIntentResult()).isEqualTo(new Classification(true, false));
         assertThat(classifier.classify(null)).isEqualTo(Classification.NONE);
     }
 
     @Test
     void candidateReplayIsExcludedBeforeSourceSpecificClassification() {
-        for (String frame : List.of("{\"content\":\"answer\"}", "{\"diyCardScene\":\"scene\"}")) {
-            ChatEvent original = normalizer.normalize("run", "session", frame).getFirst();
+        List<ChatEvent> candidates = List.of(
+                normalizer.normalize("run", "session", "{\"content\":\"answer\"}").getFirst(),
+                normalizer.normalize("run", "session", "{\"diyCardScene\":\"scene\"}").getFirst(),
+                normalizer.normalize("run", "session", "{\"type\":\"think\",\"thinkTitle\":\"analysis\"}").getFirst(),
+                relayNormalizer.normalize("run", "session", "{\"type\":\"agent-reasoning\",\"thought\":\"analysis\"}")
+                        .getFirst());
+        for (ChatEvent original : candidates) {
+            assertThat(classifier.classify(original).turn()).isTrue();
             Map<String, Object> replay = new LinkedHashMap<>(original.payload());
             replay.put("candidateSwitchReplay", true);
             assertThat(classifier.classify(new StoredChatEvent("run", "session", 0, original.type(),
