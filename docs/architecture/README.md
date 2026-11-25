@@ -12,6 +12,9 @@ WCM、ALB、Jalor、ADS与Admin/Tool/Relay/Chat共享数据依赖，以及跨AZ�
 Run 准入、流式输出、正常完成及等待分支分别写哪些表，参见
 [Chat Run 主流程数据库写入时序](chat-run-database-write-sequence.md)。
 
+工作台任务、分组步骤、后台 Agent 回调和任务会话的拟议设计，参见
+[智能工作台任务流设计方案（V1，尚未实现）](workbench-task-flow-v1.md)。
+
 流式事件落库、Redis/WebSocket 实时扇出、Event Resume、跨浏览器恢复及实例故障边界的完整实现说明，
 参见 [Chat 流式输出、断点续传与跨浏览器恢复设计](chat-streaming-and-resume.md)。
 
