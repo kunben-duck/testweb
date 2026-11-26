@@ -9,6 +9,10 @@ WCM、ALB、Jalor、ADS与Admin/Tool/Relay/Chat共享数据依赖，以及跨AZ�
 主编排代码阅读顺序、状态机、记忆边界和调试入口参见
 [FinanceEXChatService 开发导读](../onboarding.md)。
 
+移动端统一入口、按设备投递 Redis Streams 命令，以及个人 PC 断线后的分阶段恢复，参见
+[移动端聊天接入与 Claw 断线恢复设计（评审稿）](mobile-claw-routing-and-recovery.md)。
+一次提问从设备命令流投递到本地 Claw，再经会话响应流回到 App 的时序图与 Redis 命令示例，见[移动端 Redis Streams 整体流程](mobile-redis-streams-flow.md)。
+
 Run 准入、流式输出、正常完成及等待分支分别写哪些表，参见
 [Chat Run 主流程数据库写入时序](chat-run-database-write-sequence.md)。
 
