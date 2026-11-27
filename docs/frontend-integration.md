@@ -5,7 +5,9 @@
 流式事件的事实源、批量落库、Redis 跨实例扇出、WebSocket 队列及跨浏览器恢复原理，参见
 [Chat 流式输出、断点续传与跨浏览器恢复设计](architecture/chat-streaming-and-resume.md)。
 
-全部公开接口的 OpenAPI 3.0.3 定义见
+智能工作台有独立的[前端 HTTP 与 WebSocket 消费手册](workbench-frontend-integration.md)和[工作台前端 Swagger](openapi/workbench-frontend-v1.json)。任务 topic 与 Run 共用连接，但信封和恢复游标不同。
+
+聊天公开接口的 OpenAPI 3.0.3 定义见
 [FinanceEX ChatService OpenAPI](openapi/financeex-chatservice-v1.yaml)。Swagger 文档中的命名 examples
 覆盖普通请求、全部 Interaction WAIT、前端触发超时动作、页面恢复和等待态 stop；本联调文档继续说明
 前端状态组织与调用顺序。

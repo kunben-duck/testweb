@@ -12,6 +12,7 @@ import com.huawei.it.ex.one.application.integration.agent.AgentRuntimeRequest;
 import com.huawei.it.ex.one.application.integration.agent.RuntimeForwardHeaders;
 import com.huawei.it.ex.one.application.integration.agent.SelectedIntentContext;
 import com.huawei.it.ex.one.application.service.observation.TurnTraceCoordinator;
+import com.huawei.it.ex.one.application.service.workbench.WorkbenchTaskChatBinding;
 import com.huawei.it.ex.one.common.trace.TraceContext;
 import com.huawei.it.ex.one.domain.auth.UserContext;
 import com.huawei.it.ex.one.domain.chat.AttachmentRef;
@@ -40,6 +41,12 @@ import java.util.Map;
 public class AgentRuntimeExecutor {
 
     private TurnTraceCoordinator turns = TurnTraceCoordinator.DISABLED;
+    private WorkbenchTaskChatBinding workbenchTaskBinding;
+
+    @Autowired(required = false)
+    void setWorkbenchTaskBinding(WorkbenchTaskChatBinding workbenchTaskBinding) {
+        this.workbenchTaskBinding = workbenchTaskBinding;
+    }
 
     @Autowired(required = false)
     void setObservationSupport(TurnTraceCoordinator value) { this.turns = value; }
@@ -99,6 +106,10 @@ public class AgentRuntimeExecutor {
         AgentRuntime runtime = context.binding() == null
                 ? runtimeRegistry.defaultRuntime()
                 : runtimeRegistry.runtime(context.binding().provider());
+        if (workbenchTaskBinding != null && !DOMAIN_AGENT_PROVIDER.equals(runtime.provider())) {
+            return guardWorkbenchTaskTarget(user, command.sessionId(), null, () -> protect(runtime.provider(),
+                    runtime.query(request.withTurnTraceContext(turns.context(context.runId())))));
+        }
         return protect(runtime.provider(), runtime.query(request.withTurnTraceContext(turns.context(context.runId()))));
     }
 
@@ -121,8 +132,20 @@ public class AgentRuntimeExecutor {
                 context.runtimeMetadata(),
                 context.dispatchState()
         );
-        return protect(context.runtimeProvider(), runtimeRegistry.continueWithUserResponse(
-                request.withTurnTraceContext(turns.context(context.runId()))));
+        String skill = DOMAIN_AGENT_PROVIDER.equals(context.runtimeProvider())
+                && context.runtimeMetadata().get("skillId") instanceof String id ? id : null;
+        return guardWorkbenchTaskTarget(context.user(), context.sessionId(), skill,
+                () -> protect(context.runtimeProvider(), runtimeRegistry.continueWithUserResponse(
+                        request.withTurnTraceContext(turns.context(context.runId())))));
+    }
+
+    private Flux<ChatEvent> guardWorkbenchTaskTarget(UserContext user, String sessionId, String actual,
+                                            java.util.function.Supplier<Flux<ChatEvent>> dispatch) {
+        if (workbenchTaskBinding == null) return dispatch.get();
+        return Mono.fromRunnable(() -> {
+            String target = workbenchTaskBinding.target(user, sessionId);
+            if (target != null && !target.equals(actual)) throw new IllegalStateException("Task assignment changed");
+        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()).thenMany(Flux.defer(dispatch));
     }
 
     public boolean supportsWaitingUserResponse(String runtimeProvider) {

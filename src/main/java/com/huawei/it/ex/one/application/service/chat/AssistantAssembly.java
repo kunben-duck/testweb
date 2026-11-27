@@ -41,6 +41,30 @@ final class AssistantAssembly {
         this(AgentDataPersistenceState.full());
     }
 
+    // Persist only the open contentAgent part across batches. All closed parts already have a row.
+    WorkbenchTaskDisplayAssembly.Cursor cursor(int activeOrder, int count) {
+        String active = activeContentAgentContent == null ? null : activeContentAgentContent.toString();
+        return new WorkbenchTaskDisplayAssembly.Cursor(deltaDraft.toString(), snapshot, structuredFallbackContent,
+                domainAgentContentObserved, domainAgentThinkingSinceContent, active, activeContentAgentPayload,
+                activeOrder, count);
+    }
+
+    int openPart() { return activeContentAgentPartIndex; }
+
+    void restore(WorkbenchTaskDisplayAssembly.Cursor cursor) {
+        deltaDraft.append(cursor.delta());
+        snapshot = cursor.snapshot();
+        structuredFallbackContent = cursor.fallback();
+        domainAgentContentObserved = cursor.contentSeen();
+        domainAgentThinkingSinceContent = cursor.thinkingSinceContent();
+        if (cursor.activeOrder() >= 0) {
+            activeContentAgentPartIndex = 0;
+            activeContentAgentContent = new StringBuilder(cursor.active());
+            activeContentAgentPayload = cursor.activePayload();
+            parts.add(contentAgentPart(activeContentAgentPayload));
+        }
+    }
+
     AssistantAssembly(AgentDataPersistenceState persistenceState) {
         this.persistenceState = persistenceState == null
                 ? AgentDataPersistenceState.full()

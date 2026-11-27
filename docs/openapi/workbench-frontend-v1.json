@@ -1,0 +1,2268 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "FinanceEX 智能工作台任务 API：前端",
+    "version": "1.0",
+    "description": "工作台完整 HTTP 契约；两个方向的服务凭据不可混用。Agent 接收操作单独指定示例服务器。WebSocket 帧与断线恢复见前端联调手册。"
+  },
+  "paths": {
+    "/v1/chat/tasks": {
+      "get": {
+        "operationId": "listWorkbenchTasks",
+        "summary": "查询我的任务",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0,
+              "default": 0
+            },
+            "description": "从第几条记录起读，从 0 开始。"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "最多返回多少条；过程按操作分页。"
+          },
+          {
+            "name": "relation",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ALL",
+                "OWNER",
+                "PARTICIPANT"
+              ],
+              "default": "ALL"
+            },
+            "description": "与当前用户的关系。"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "整单状态。"
+          },
+          {
+            "name": "l1",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "一级分类 ID。"
+          },
+          {
+            "name": "l2",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "二级分类 ID，与 l3 取交集。"
+          },
+          {
+            "name": "l3",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "三级分类 ID。"
+          },
+          {
+            "name": "app",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "扩展字段查询的来源产品 ID，配合 field 使用。"
+          },
+          {
+            "name": "field",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "该产品和类别已登记的扩展字段。"
+          },
+          {
+            "name": "op",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "filter",
+                "search",
+                "sort"
+              ],
+              "default": "filter"
+            },
+            "description": "字典允许的匹配、搜索或排序方式。"
+          },
+          {
+            "name": "value",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "filter/search 必传；filter 按字典类型解析。"
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "sort 时 desc 降序，其他按升序。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查询我的任务",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskSummary"
+                  }
+                },
+                "examples": {
+                  "mine": {
+                    "value": [
+                      {
+                        "channel": "EXTERNAL",
+                        "locale": "zh",
+                        "l1": {
+                          "id": "accounting",
+                          "name": "财务"
+                        },
+                        "sourceProduct": {
+                          "id": "finance",
+                          "name": "财务工作台"
+                        },
+                        "title": "十一月结账",
+                        "status": "PENDING",
+                        "owner": {
+                          "id": "u1",
+                          "name": "王一"
+                        },
+                        "creator": "财务工作台",
+                        "responsibleAgent": {
+                          "id": "ledger-a",
+                          "name": "账务助手 A"
+                        },
+                        "executingAgents": [],
+                        "participants": [
+                          {
+                            "id": "u2",
+                            "name": "李二"
+                          }
+                        ],
+                        "taskId": "task_0123456789abcdef0123456789abcdef",
+                        "assignmentVersion": 1,
+                        "taskVersion": 1,
+                        "createdAt": "2026-11-28T01:00:00Z"
+                      }
+                    ]
+                  },
+                  "empty": {
+                    "value": []
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务字段不合法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "INVALID_pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "工作台前端"
+        ],
+        "description": "数组，无总条数；仅返回当前用户拥有或参与的任务，不预载步骤。 使用企业身份，不传机机凭据。",
+        "x-identity-provider": "VerifiedWorkbenchIdentity (deployment-specific)"
+      }
+    },
+    "/v1/chat/tasks/{taskId}": {
+      "get": {
+        "operationId": "getWorkbenchTask",
+        "summary": "读取整单快照",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "服务端返回的任务 ID。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "读取整单快照",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                },
+                "examples": {
+                  "initial": {
+                    "value": {
+                      "channel": "EXTERNAL",
+                      "locale": "zh",
+                      "l1": {
+                        "id": "accounting",
+                        "name": "财务"
+                      },
+                      "sourceProduct": {
+                        "id": "finance",
+                        "name": "财务工作台"
+                      },
+                      "title": "十一月结账",
+                      "status": "PENDING",
+                      "owner": {
+                        "id": "u1",
+                        "name": "王一"
+                      },
+                      "creator": "财务工作台",
+                      "responsibleAgent": {
+                        "id": "ledger-a",
+                        "name": "账务助手 A"
+                      },
+                      "executingAgents": [],
+                      "participants": [
+                        {
+                          "id": "u2",
+                          "name": "李二"
+                        }
+                      ],
+                      "taskId": "task_0123456789abcdef0123456789abcdef",
+                      "assignmentVersion": 1,
+                      "taskVersion": 1,
+                      "createdAt": "2026-11-28T01:00:00Z",
+                      "groups": [],
+                      "steps": [],
+                      "currentStepIds": [],
+                      "interactions": [],
+                      "allowedActions": [
+                        "START",
+                        "TERMINATE"
+                      ]
+                    }
+                  },
+                  "waitingParticipant": {
+                    "value": {
+                      "channel": "EXTERNAL",
+                      "locale": "zh",
+                      "l1": {
+                        "id": "accounting",
+                        "name": "财务"
+                      },
+                      "sourceProduct": {
+                        "id": "finance",
+                        "name": "财务工作台"
+                      },
+                      "title": "十一月结账",
+                      "status": "RUNNING",
+                      "owner": {
+                        "id": "u1",
+                        "name": "王一"
+                      },
+                      "creator": "财务工作台",
+                      "responsibleAgent": {
+                        "id": "ledger-a",
+                        "name": "账务助手 A"
+                      },
+                      "executingAgents": [
+                        {
+                          "id": "ledger-a",
+                          "name": "账务助手 A"
+                        }
+                      ],
+                      "participants": [
+                        {
+                          "id": "u2",
+                          "name": "李二"
+                        }
+                      ],
+                      "taskId": "task_0123456789abcdef0123456789abcdef",
+                      "assignmentVersion": 1,
+                      "taskVersion": 3,
+                      "createdAt": "2026-11-28T01:00:00Z",
+                      "groups": [
+                        {
+                          "groupId": "g1",
+                          "title": "账务复核",
+                          "sortOrder": 0,
+                          "removed": false,
+                          "progress": {
+                            "completed": 0,
+                            "total": 2
+                          }
+                        }
+                      ],
+                      "steps": [
+                        {
+                          "stepId": "s1",
+                          "groupId": "g1",
+                          "title": "核对报表",
+                          "sortOrder": 0,
+                          "status": "WAITING_HUMAN",
+                          "removed": false,
+                          "stepVersion": 2,
+                          "startedAt": "2026-11-28T01:01:00Z",
+                          "elapsedMs": 60000
+                        },
+                        {
+                          "stepId": "s2",
+                          "groupId": "g1",
+                          "title": "复核差异",
+                          "sortOrder": 1,
+                          "status": "RUNNING",
+                          "removed": false,
+                          "stepVersion": 1,
+                          "startedAt": "2026-11-28T01:01:00Z",
+                          "elapsedMs": 60000
+                        }
+                      ],
+                      "currentStepIds": [
+                        "s1",
+                        "s2"
+                      ],
+                      "interactions": [
+                        {
+                          "interactionId": "i1",
+                          "requestId": "approval1",
+                          "stepId": "s1",
+                          "operationId": "verify",
+                          "questions": [
+                            {
+                              "question": "通过复核？",
+                              "multi_select": false
+                            }
+                          ],
+                          "answerUserIds": [
+                            "u2"
+                          ],
+                          "status": "WAITING"
+                        }
+                      ],
+                      "allowedActions": [],
+                      "startedAt": "2026-11-28T01:01:00Z",
+                      "elapsedMs": 60000,
+                      "progress": {
+                        "completed": 0,
+                        "total": 2
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "工作台前端"
+        ],
+        "description": "一致性快照，含当前计划、可见交互和责任人的控制动作。 使用企业身份，不传机机凭据。",
+        "x-identity-provider": "VerifiedWorkbenchIdentity (deployment-specific)"
+      },
+      "delete": {
+        "operationId": "deleteWorkbenchTask",
+        "summary": "逻辑删除已完成或已终止的任务",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "服务端返回的任务 ID。"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已删除"
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求与已提交事实冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TERMINATE_BEFORE_DELETE"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "工作台前端"
+        ],
+        "description": "仅责任人可逻辑删除 COMPLETED / TERMINATED 任务。成功无响应体。 使用企业身份，不传机机凭据。",
+        "x-identity-provider": "VerifiedWorkbenchIdentity (deployment-specific)"
+      }
+    },
+    "/v1/chat/tasks/{taskId}/events": {
+      "get": {
+        "operationId": "readWorkbenchTaskEvents",
+        "summary": "恢复业务变化",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "服务端返回的任务 ID。"
+          },
+          {
+            "name": "afterVersion",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "default": 0
+            },
+            "description": "不含该版本，仅返回其后的变化。"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "最多返回多少条；过程按操作分页。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "恢复业务变化",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChangePageItem"
+                  }
+                },
+                "examples": {
+                  "afterTwo": {
+                    "value": [
+                      {
+                        "taskVersion": 3,
+                        "changes": [
+                          {
+                            "type": "step.updated",
+                            "objectId": "s1",
+                            "data": {
+                              "stepId": "s1",
+                              "status": "WAITING_HUMAN"
+                            }
+                          },
+                          {
+                            "type": "interaction.requested",
+                            "objectId": "i1",
+                            "data": {
+                              "interactionId": "i1",
+                              "stepId": "s1"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "taskVersion": 4,
+                        "changes": [
+                          {
+                            "type": "command.accepted",
+                            "action": "ANSWER"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务字段不合法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "INVALID_pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "重新读取详情后续接",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "REFRESH_TASK"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "工作台前端"
+        ],
+        "description": "按 taskVersion 升序补取，不含 afterVersion，不返回执行正文。 使用企业身份，不传机机凭据。",
+        "x-identity-provider": "VerifiedWorkbenchIdentity (deployment-specific)"
+      }
+    },
+    "/v1/chat/tasks/{taskId}/process": {
+      "get": {
+        "operationId": "getWorkbenchProcess",
+        "summary": "分页读取任务执行详情",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "服务端返回的任务 ID。"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0,
+              "default": 0
+            },
+            "description": "从第几条记录起读，从 0 开始。"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 2
+            },
+            "description": "最多返回多少条；过程按操作分页。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分页读取任务执行详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Process"
+                },
+                "examples": {
+                  "completed": {
+                    "value": {
+                      "operations": [
+                        {
+                          "operationId": "plan-report",
+                          "agentId": "ledger-a",
+                          "status": "COMPLETED",
+                          "content": "开始规划。",
+                          "parts": [
+                            {
+                              "partType": "ANSWER",
+                              "sourceType": "message.snapshot",
+                              "contentText": "开始规划。",
+                              "title": "最终回答",
+                              "status": "COMPLETED",
+                              "channel": "answer",
+                              "displayHint": "hidden",
+                              "visible": false,
+                              "payload": {
+                                "content": "开始规划。",
+                                "serverTimestampMs": 1795827601000
+                              },
+                              "partOrder": 1
+                            }
+                          ]
+                        }
+                      ],
+                      "interactions": [],
+                      "lastOutputSeq": 2
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务字段不合法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "INVALID_processPage"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "工作台前端"
+        ],
+        "description": "任务级操作历史、可见交互、输出水位。不是任务状态版本。 使用企业身份，不传机机凭据。",
+        "x-identity-provider": "VerifiedWorkbenchIdentity (deployment-specific)"
+      }
+    },
+    "/v1/chat/tasks/{taskId}/steps/{stepId}/process": {
+      "get": {
+        "operationId": "getWorkbenchStepProcess",
+        "summary": "分页读取步骤执行详情",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "服务端返回的任务 ID。"
+          },
+          {
+            "name": "stepId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "本任务中的稳定步骤 ID。"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0,
+              "default": 0
+            },
+            "description": "从第几条记录起读，从 0 开始。"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 4,
+              "default": 2
+            },
+            "description": "最多返回多少条；过程按操作分页。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分页读取步骤执行详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Process"
+                },
+                "examples": {
+                  "beforeOutput": {
+                    "value": {
+                      "operations": [],
+                      "interactions": [],
+                      "lastOutputSeq": 0
+                    }
+                  },
+                  "completedStep": {
+                    "value": {
+                      "operations": [
+                        {
+                          "operationId": "review-final",
+                          "agentId": "ledger-b",
+                          "status": "COMPLETED",
+                          "content": "无剩余差异。",
+                          "parts": [
+                            {
+                              "partType": "ANSWER",
+                              "sourceType": "message.snapshot",
+                              "contentText": "无剩余差异。",
+                              "title": "最终回答",
+                              "status": "COMPLETED",
+                              "channel": "answer",
+                              "displayHint": "hidden",
+                              "visible": false,
+                              "payload": {
+                                "content": "无剩余差异。",
+                                "serverTimestampMs": 1795827900000
+                              },
+                              "partOrder": 1
+                            }
+                          ]
+                        }
+                      ],
+                      "interactions": [],
+                      "lastOutputSeq": 2
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务字段不合法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "INVALID_processPage"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "工作台前端"
+        ],
+        "description": "指定步骤的操作历史，可与其他步骤并行；各自独立游标。 使用企业身份，不传机机凭据。",
+        "x-identity-provider": "VerifiedWorkbenchIdentity (deployment-specific)"
+      }
+    },
+    "/v1/chat/tasks/{taskId}/actions": {
+      "post": {
+        "operationId": "submitWorkbenchAction",
+        "summary": "授权并登记待投递命令",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "服务端返回的任务 ID。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Action"
+              },
+              "examples": {
+                "START": {
+                  "value": {
+                    "action": "START",
+                    "expectedVersion": 1,
+                    "idempotencyKey": "start-01"
+                  }
+                },
+                "PAUSE": {
+                  "value": {
+                    "action": "PAUSE",
+                    "expectedVersion": 2,
+                    "idempotencyKey": "pause-01"
+                  }
+                },
+                "RESUME": {
+                  "value": {
+                    "action": "RESUME",
+                    "expectedVersion": 5,
+                    "idempotencyKey": "resume-01"
+                  }
+                },
+                "TERMINATE": {
+                  "value": {
+                    "action": "TERMINATE",
+                    "expectedVersion": 2,
+                    "idempotencyKey": "terminate-01"
+                  }
+                },
+                "ANSWER": {
+                  "value": {
+                    "action": "ANSWER",
+                    "expectedVersion": 3,
+                    "idempotencyKey": "answer-01",
+                    "interactionId": "i1",
+                    "answer": {
+                      "label": {
+                        "通过复核？": "通过"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "授权并登记待投递命令",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "commandId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "accepted": {
+                    "value": {
+                      "commandId": "cmd_00000000000000000000000000000005"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务字段不合法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "INVALID_answer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求与已提交事实冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "STALE_TASK_VERSION"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "工作台前端"
+        ],
+        "description": "写入用户命令和版本事件，不提前更新 Agent 的业务状态。ANSWER 权限按待办判断。 使用企业身份，不传机机凭据。",
+        "x-identity-provider": "VerifiedWorkbenchIdentity (deployment-specific)"
+      }
+    },
+    "/v1/chat/tasks/{taskId}/session": {
+      "post": {
+        "operationId": "openWorkbenchSession",
+        "summary": "取得或创建个人任务会话",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "服务端返回的任务 ID。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "取得或创建个人任务会话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "own": {
+                    "value": {
+                      "sessionId": "session_11111111111111111111111111111111"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "工作台前端"
+        ],
+        "description": "无请求体，返回当前用户自己的有效关联会话；有则复用。 使用企业身份，不传机机凭据。",
+        "x-identity-provider": "VerifiedWorkbenchIdentity (deployment-specific)"
+      }
+    },
+    "/v1/chat/tasks/{taskId}/logs": {
+      "get": {
+        "operationId": "readWorkbenchLogs",
+        "summary": "分页查询任务审计日志",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "服务端返回的任务 ID。"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0,
+              "default": 0
+            },
+            "description": "从第几条记录起读，从 0 开始。"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "description": "最多返回多少条；过程按操作分页。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分页查询任务审计日志",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Log"
+                  }
+                },
+                "examples": {
+                  "created": {
+                    "value": [
+                      {
+                        "audit_id": "audit_11111111111111111111111111111111",
+                        "actor_id": "product-a",
+                        "actor_type": "SERVICE",
+                        "object_id": "task_0123456789abcdef0123456789abcdef",
+                        "action_type": "task.created",
+                        "outcome": "ACCEPTED",
+                        "creation_date": "2026-11-28T01:00:00Z"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务字段不合法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "INVALID_pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "工作台前端"
+        ],
+        "description": "按时间倒序读取授权任务的审计记录，不包含执行正文。 使用企业身份，不传机机凭据。",
+        "x-identity-provider": "VerifiedWorkbenchIdentity (deployment-specific)"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TaskSummary": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "description": "服务端统一任务标识。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "PAUSED",
+              "WAITING_HUMAN",
+              "TERMINATED",
+              "FAILED",
+              "COMPLETED"
+            ],
+            "description": "当前业务状态。"
+          },
+          "taskVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "整单已提交业务版本。"
+          },
+          "assignmentVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "责任 Agent 指派版本，交接后更新。"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "EXTERNAL",
+              "SCHEDULED",
+              "AGENT",
+              "CHAT"
+            ],
+            "description": "触发建单的渠道。"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "面向用户的标题。"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "l1": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "l2": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "l3": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "sourceProduct": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "creator": {
+            "type": "string",
+            "description": "创建者展示文字。"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "responsibleAgent": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "executingAgents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "description": "当前执行方列表，可为空。"
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "description": "任务参与人；非全部参与人均可答同一待办。"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "businessCode": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "progressSummary": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "collaboratingAgents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            }
+          },
+          "recommendedSkills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            }
+          },
+          "extensions": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "plannedStart": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "plannedEnd": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "statusDescription": {
+            "type": "string"
+          },
+          "elapsedMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/Progress"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string"
+          },
+          "remainingSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "schemaVersion": {
+            "type": "string"
+          }
+        }
+      },
+      "Named": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "PlanTime": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "zone": {
+            "type": "string"
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "DAY",
+              "HOUR",
+              "MINUTE"
+            ]
+          }
+        },
+        "required": [
+          "value",
+          "zone",
+          "precision"
+        ]
+      },
+      "Progress": {
+        "type": "object",
+        "properties": {
+          "completed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "completed",
+          "total"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "expectedFrameNo": {
+            "type": "integer",
+            "format": "int64",
+            "description": "FRAME_GAP 时给出下一期望输入帧号。"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "description": "服务端统一任务标识。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "PAUSED",
+              "WAITING_HUMAN",
+              "TERMINATED",
+              "FAILED",
+              "COMPLETED"
+            ],
+            "description": "当前业务状态。"
+          },
+          "taskVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "整单已提交业务版本。"
+          },
+          "assignmentVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "责任 Agent 指派版本，交接后更新。"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "EXTERNAL",
+              "SCHEDULED",
+              "AGENT",
+              "CHAT"
+            ],
+            "description": "触发建单的渠道。"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "面向用户的标题。"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "l1": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "l2": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "l3": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "sourceProduct": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "creator": {
+            "type": "string",
+            "description": "创建者展示文字。"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "responsibleAgent": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "executingAgents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "description": "当前执行方列表，可为空。"
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "description": "任务参与人；非全部参与人均可答同一待办。"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "businessCode": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "progressSummary": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "collaboratingAgents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            }
+          },
+          "recommendedSkills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            }
+          },
+          "extensions": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "plannedStart": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "plannedEnd": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "statusDescription": {
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Group"
+            }
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            }
+          },
+          "currentStepIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "interactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InteractionView"
+            }
+          },
+          "elapsedMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/Progress"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string"
+          },
+          "remainingSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "schemaVersion": {
+            "type": "string"
+          }
+        }
+      },
+      "Group": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "面向用户的标题。"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          },
+          "removed": {
+            "type": "boolean"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/Progress"
+          }
+        }
+      },
+      "Step": {
+        "type": "object",
+        "properties": {
+          "stepId": {
+            "type": "string"
+          },
+          "groupId": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "面向用户的标题。"
+          },
+          "description": {
+            "type": "string"
+          },
+          "renderRef": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "PAUSED",
+              "WAITING_HUMAN",
+              "TERMINATED",
+              "FAILED",
+              "COMPLETED",
+              "SKIPPED"
+            ],
+            "description": "当前业务状态。"
+          },
+          "statusDescription": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "executingAgents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "description": "当前执行方列表，可为空。"
+          },
+          "plannedStart": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "plannedEnd": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "removed": {
+            "type": "boolean"
+          },
+          "stepVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "executorAssignmentVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string"
+          },
+          "elapsedMs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "remainingSeconds": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "InteractionView": {
+        "type": "object",
+        "properties": {
+          "interactionId": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "稳定的调用方请求标识。"
+          },
+          "agentId": {
+            "type": "string",
+            "description": "本次操作实际执行者；协作者需显式传入。"
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "description": "同一任务内一次操作的唯一标识。"
+          },
+          "answerUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            },
+            "minItems": 1,
+            "maxItems": 64
+          },
+          "status": {
+            "type": "string",
+            "description": "当前业务状态。"
+          },
+          "answer": {
+            "$ref": "#/components/schemas/Answer"
+          }
+        }
+      },
+      "Question": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "multi_select": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "question"
+        ]
+      },
+      "Answer": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "maxItems": 128
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "ChangePageItem": {
+        "type": "object",
+        "properties": {
+          "taskVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "整单已提交业务版本。"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangeNotice"
+            }
+          }
+        },
+        "required": [
+          "taskVersion",
+          "changes"
+        ]
+      },
+      "ChangeNotice": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "task.created",
+              "command.accepted",
+              "task.updated",
+              "task.assigned",
+              "group.upsert",
+              "group.removed",
+              "step.upsert",
+              "step.updated",
+              "step.removed",
+              "interaction.requested"
+            ]
+          },
+          "objectId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "START",
+              "PAUSE",
+              "RESUME",
+              "TERMINATE",
+              "ANSWER"
+            ]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 300,
+                "description": "面向用户的标题。"
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 1000
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "PENDING",
+                  "RUNNING",
+                  "PAUSED",
+                  "WAITING_HUMAN",
+                  "TERMINATED",
+                  "FAILED",
+                  "COMPLETED"
+                ],
+                "description": "当前业务状态。"
+              },
+              "statusDescription": {
+                "type": "string"
+              },
+              "progressSummary": {
+                "type": "string",
+                "maxLength": 1000
+              },
+              "responsibleAgent": {
+                "$ref": "#/components/schemas/Named"
+              },
+              "executingAgents": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Named"
+                },
+                "description": "当前执行方列表，可为空。"
+              },
+              "groupId": {
+                "type": "string",
+                "nullable": true
+              },
+              "stepId": {
+                "type": "string"
+              },
+              "sortOrder": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "summary": {
+                "type": "string"
+              },
+              "interactionId": {
+                "type": "string"
+              }
+            },
+            "description": "只复制公开字段；部分或全部字段都可能缺失。"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "Process": {
+        "type": "object",
+        "properties": {
+          "lastOutputSeq": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "nextOffset": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "operationId": {
+                  "type": "string"
+                },
+                "agentId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "parts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Part"
+                  }
+                }
+              }
+            }
+          },
+          "interactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InteractionView"
+            }
+          }
+        },
+        "required": [
+          "operations",
+          "interactions",
+          "lastOutputSeq"
+        ]
+      },
+      "Part": {
+        "type": "object",
+        "properties": {
+          "partType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceType": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentText": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "description": "面向用户的标题。"
+          },
+          "status": {
+            "type": "string",
+            "nullable": true,
+            "description": "当前业务状态。"
+          },
+          "channel": {
+            "type": "string",
+            "nullable": true,
+            "description": "触发建单的渠道。"
+          },
+          "displayHint": {
+            "type": "string",
+            "nullable": true
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "partOrder": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "Action": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "START",
+              "PAUSE",
+              "RESUME",
+              "TERMINATE",
+              "ANSWER"
+            ]
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "调用方提交时所见的整单版本。"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "同一用户对本任务的一次动作键。"
+          },
+          "interactionId": {
+            "type": "string"
+          },
+          "answer": {
+            "$ref": "#/components/schemas/Answer"
+          }
+        },
+        "required": [
+          "action",
+          "expectedVersion",
+          "idempotencyKey"
+        ],
+        "description": "仅 ANSWER 要求 interactionId 和 answer；DELETE 不通过此入口。expectedVersion 必须等于当前版本，网络重发须保持整份请求不变。"
+      },
+      "Log": {
+        "type": "object",
+        "properties": {
+          "audit_id": {
+            "type": "string"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_type": {
+            "type": "string"
+          },
+          "object_id": {
+            "type": "string"
+          },
+          "action_type": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "creation_date": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "工作台前端",
+      "externalDocs": {
+        "url": "../workbench-frontend-integration.md",
+        "description": "完整接入示例"
+      },
+      "description": "使用部署端已验证的企业用户身份；不接受从表单选择租户或用户。"
+    }
+  ],
+  "servers": [
+    {
+      "url": "/",
+      "description": "当前 ChatService 部署的业务入口；Agent 命令操作使用其独立服务器。"
+    }
+  ]
+}

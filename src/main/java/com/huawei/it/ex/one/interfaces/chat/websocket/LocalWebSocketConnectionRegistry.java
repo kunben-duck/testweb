@@ -130,6 +130,13 @@ public class LocalWebSocketConnectionRegistry {
         get(connectionId).ifPresent(state -> state.unsubscribe(topicId));
     }
 
+    void unsubscribe(String connectionId, String topicId, Disposable expected) {
+        get(connectionId).ifPresent(state -> {
+            SubscriptionState old = state.subscriptions.get(topicId);
+            if (old != null && old.disposable == expected && state.subscriptions.remove(topicId, old)) old.dispose();
+        });
+    }
+
     /**
      * 判断事件是否应发送到该连接，并记录已发送序号。
      *

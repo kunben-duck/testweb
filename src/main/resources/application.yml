@@ -49,6 +49,8 @@ mybatis:
     map-underscore-to-camel-case: true
 
 financeex:
+  workbench:
+    enabled: ${FINANCEEX_WORKBENCH_ENABLED:false}
   observability:
     enabled: ${FINANCEEX_OBSERVABILITY_ENABLED:false}
     writer:

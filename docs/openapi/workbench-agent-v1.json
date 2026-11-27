@@ -1,0 +1,1863 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "FinanceEX 智能工作台任务 API：产品与 Agent",
+    "version": "1.0",
+    "description": "工作台完整 HTTP 契约；两个方向的服务凭据不可混用。Agent 接收操作单独指定示例服务器。WebSocket 帧与断线恢复见前端联调手册。"
+  },
+  "paths": {
+    "/v1/internal/tasks": {
+      "post": {
+        "operationId": "createWorkbenchTask",
+        "summary": "幂等建单",
+        "parameters": [],
+        "security": [
+          {
+            "bearer": [],
+            "client": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Create"
+              },
+              "examples": {
+                "EXTERNAL": {
+                  "value": {
+                    "requestId": "close-202611",
+                    "channel": "EXTERNAL",
+                    "locale": "zh",
+                    "l1": {
+                      "id": "accounting",
+                      "name": "财务"
+                    },
+                    "sourceProduct": {
+                      "id": "finance",
+                      "name": "财务工作台"
+                    },
+                    "title": "十一月结账",
+                    "status": "PENDING",
+                    "owner": {
+                      "id": "u1",
+                      "name": "王一"
+                    },
+                    "creator": "财务工作台",
+                    "responsibleAgent": {
+                      "id": "ledger-a",
+                      "name": "账务助手 A"
+                    },
+                    "executingAgents": [],
+                    "agentExecutionStatus": "IDLE",
+                    "participants": [
+                      {
+                        "id": "u2",
+                        "name": "李二"
+                      }
+                    ]
+                  }
+                },
+                "AGENT": {
+                  "value": {
+                    "requestId": "agent-01",
+                    "channel": "AGENT",
+                    "locale": "zh",
+                    "l1": {
+                      "id": "accounting",
+                      "name": "财务"
+                    },
+                    "sourceProduct": {
+                      "id": "finance",
+                      "name": "财务工作台"
+                    },
+                    "title": "十一月结账",
+                    "status": "PENDING",
+                    "owner": {
+                      "id": "u1",
+                      "name": "王一"
+                    },
+                    "creator": "财务工作台",
+                    "responsibleAgent": {
+                      "id": "ledger-a",
+                      "name": "账务助手 A"
+                    },
+                    "executingAgents": [],
+                    "agentExecutionStatus": "IDLE",
+                    "participants": [
+                      {
+                        "id": "u2",
+                        "name": "李二"
+                      }
+                    ]
+                  }
+                },
+                "SCHEDULED": {
+                  "value": {
+                    "requestId": "schedule-202611",
+                    "channel": "SCHEDULED",
+                    "locale": "zh",
+                    "l1": {
+                      "id": "accounting",
+                      "name": "财务"
+                    },
+                    "sourceProduct": {
+                      "id": "finance",
+                      "name": "财务工作台"
+                    },
+                    "title": "十一月结账",
+                    "status": "PENDING",
+                    "owner": {
+                      "id": "u1",
+                      "name": "王一"
+                    },
+                    "creator": "财务工作台",
+                    "responsibleAgent": {
+                      "id": "ledger-a",
+                      "name": "账务助手 A"
+                    },
+                    "executingAgents": [],
+                    "agentExecutionStatus": "IDLE",
+                    "participants": [
+                      {
+                        "id": "u2",
+                        "name": "李二"
+                      }
+                    ]
+                  }
+                },
+                "CHAT": {
+                  "value": {
+                    "requestId": "chat-01",
+                    "channel": "CHAT",
+                    "locale": "zh",
+                    "l1": {
+                      "id": "accounting",
+                      "name": "财务"
+                    },
+                    "sourceProduct": {
+                      "id": "finance",
+                      "name": "财务工作台"
+                    },
+                    "title": "十一月结账",
+                    "status": "PENDING",
+                    "owner": {
+                      "id": "u1",
+                      "name": "王一"
+                    },
+                    "creator": "财务工作台",
+                    "responsibleAgent": {
+                      "id": "ledger-a",
+                      "name": "账务助手 A"
+                    },
+                    "executingAgents": [],
+                    "agentExecutionStatus": "IDLE",
+                    "participants": [
+                      {
+                        "id": "u2",
+                        "name": "李二"
+                      }
+                    ],
+                    "taskCreationContext": "<本轮服务端签发的凭据>"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "返回原建单回执",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAck"
+                },
+                "examples": {
+                  "external": {
+                    "value": {
+                      "taskId": "task_0123456789abcdef0123456789abcdef",
+                      "status": "PENDING",
+                      "taskVersion": 1,
+                      "assignmentVersion": 1
+                    }
+                  },
+                  "chat": {
+                    "value": {
+                      "taskId": "task_0123456789abcdef0123456789abcdef",
+                      "status": "PENDING",
+                      "taskVersion": 1,
+                      "assignmentVersion": 1,
+                      "referenceToken": "<原 Run 的展示凭据>"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "幂等建单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAck"
+                },
+                "examples": {
+                  "external": {
+                    "value": {
+                      "taskId": "task_0123456789abcdef0123456789abcdef",
+                      "status": "PENDING",
+                      "taskVersion": 1,
+                      "assignmentVersion": 1
+                    }
+                  },
+                  "chat": {
+                    "value": {
+                      "taskId": "task_0123456789abcdef0123456789abcdef",
+                      "status": "PENDING",
+                      "taskVersion": 1,
+                      "assignmentVersion": 1,
+                      "referenceToken": "<原 Run 的展示凭据>"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务字段不合法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "INVALID_title"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "机机凭据缺失或无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "SERVICE_IDENTITY_REQUIRED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求与已提交事实冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "IDEMPOTENCY_CONFLICT"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "批次或操作超过容量",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "BATCH_TOO_LARGE"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "产品与 Agent 上报"
+        ],
+        "description": "创建独立任务，不自动开始执行。仅 CHAT 关联来源会话。"
+      }
+    },
+    "/v1/internal/tasks/{taskId}/sync": {
+      "post": {
+        "operationId": "syncWorkbenchTask",
+        "summary": "提交一个状态或输出批次",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "服务端返回的任务 ID。"
+          }
+        ],
+        "security": [
+          {
+            "bearer": [],
+            "client": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/StateBatch"
+                  },
+                  {
+                    "$ref": "#/components/schemas/OutputBatch"
+                  }
+                ]
+              },
+              "examples": {
+                "plan": {
+                  "value": {
+                    "kind": "STATE_CHANGE",
+                    "eventId": "plan",
+                    "assignmentVersion": 1,
+                    "expectedVersion": 1,
+                    "changes": [
+                      {
+                        "type": "task.updated",
+                        "data": {
+                          "status": "RUNNING",
+                          "executingAgents": [
+                            {
+                              "id": "ledger-a",
+                              "name": "账务助手 A"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "type": "group.upsert",
+                        "data": {
+                          "groupId": "g1",
+                          "title": "账务复核",
+                          "sortOrder": 0
+                        }
+                      },
+                      {
+                        "type": "step.upsert",
+                        "data": {
+                          "stepId": "s1",
+                          "groupId": "g1",
+                          "title": "核对报表",
+                          "sortOrder": 0,
+                          "status": "RUNNING"
+                        }
+                      },
+                      {
+                        "type": "step.upsert",
+                        "data": {
+                          "stepId": "s2",
+                          "groupId": "g1",
+                          "title": "复核差异",
+                          "sortOrder": 1,
+                          "status": "RUNNING"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "ask": {
+                  "value": {
+                    "kind": "STATE_CHANGE",
+                    "eventId": "ask",
+                    "assignmentVersion": 1,
+                    "expectedVersion": 2,
+                    "changes": [
+                      {
+                        "type": "step.updated",
+                        "data": {
+                          "stepId": "s1",
+                          "status": "WAITING_HUMAN"
+                        }
+                      },
+                      {
+                        "type": "interaction.requested",
+                        "data": {
+                          "interactionId": "i1",
+                          "requestId": "approval1",
+                          "stepId": "s1",
+                          "operationId": "verify",
+                          "questions": [
+                            {
+                              "question": "通过复核？",
+                              "multi_select": false
+                            }
+                          ],
+                          "answerUserIds": [
+                            "u2"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "finishStep": {
+                  "value": {
+                    "kind": "STATE_CHANGE",
+                    "eventId": "verified",
+                    "assignmentVersion": 1,
+                    "expectedVersion": 4,
+                    "changes": [
+                      {
+                        "type": "step.updated",
+                        "data": {
+                          "stepId": "s1",
+                          "status": "COMPLETED",
+                          "summary": "已核对，人工复核通过。"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "handoff": {
+                  "value": {
+                    "kind": "STATE_CHANGE",
+                    "eventId": "handoff",
+                    "assignmentVersion": 1,
+                    "expectedVersion": 5,
+                    "changes": [
+                      {
+                        "type": "task.updated",
+                        "data": {
+                          "executingAgents": [
+                            {
+                              "id": "ledger-b",
+                              "name": "账务助手 B"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "type": "task.assigned",
+                        "data": {
+                          "responsibleAgent": {
+                            "id": "ledger-b",
+                            "name": "账务助手 B"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "finishSecond": {
+                  "value": {
+                    "kind": "STATE_CHANGE",
+                    "eventId": "reviewed",
+                    "assignmentVersion": 2,
+                    "expectedVersion": 6,
+                    "changes": [
+                      {
+                        "type": "step.updated",
+                        "data": {
+                          "stepId": "s2",
+                          "status": "COMPLETED",
+                          "summary": "未发现未解决差异。"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "complete": {
+                  "value": {
+                    "kind": "STATE_CHANGE",
+                    "eventId": "done",
+                    "assignmentVersion": 2,
+                    "expectedVersion": 7,
+                    "changes": [
+                      {
+                        "type": "task.updated",
+                        "data": {
+                          "status": "COMPLETED",
+                          "executingAgents": []
+                        }
+                      }
+                    ]
+                  }
+                },
+                "removePlan": {
+                  "value": {
+                    "kind": "STATE_CHANGE",
+                    "eventId": "remove-plan",
+                    "assignmentVersion": 1,
+                    "expectedVersion": 2,
+                    "changes": [
+                      {
+                        "type": "step.removed",
+                        "data": {
+                          "stepId": "s1"
+                        }
+                      },
+                      {
+                        "type": "step.removed",
+                        "data": {
+                          "stepId": "s2"
+                        }
+                      },
+                      {
+                        "type": "group.removed",
+                        "data": {
+                          "groupId": "g1"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "task": {
+                  "value": {
+                    "kind": "OUTPUT_FRAMES",
+                    "scope": "TASK",
+                    "operationId": "plan-report",
+                    "assignmentVersion": 1,
+                    "firstFrameNo": 1,
+                    "frames": [
+                      {
+                        "content": "开始规划。"
+                      },
+                      {
+                        "endFlag": true
+                      }
+                    ]
+                  }
+                },
+                "step": {
+                  "value": {
+                    "kind": "OUTPUT_FRAMES",
+                    "scope": "STEP",
+                    "stepId": "s1",
+                    "operationId": "verify",
+                    "assignmentVersion": 1,
+                    "firstFrameNo": 1,
+                    "frames": [
+                      {
+                        "type": "heartbeat"
+                      },
+                      {
+                        "type": "think",
+                        "thinkTitle": "核对口径"
+                      },
+                      {
+                        "type": "tool",
+                        "toolTitle": "校验报表"
+                      },
+                      {
+                        "state": "GENERATE",
+                        "stateDesc": "整理结果"
+                      },
+                      {
+                        "sourceDocuments": [
+                          "附件A"
+                        ]
+                      },
+                      {
+                        "cardUrl": "https://assets.example.invalid/report.js"
+                      },
+                      {
+                        "traceId": "downstream-demo"
+                      },
+                      {
+                        "state": "CHECK"
+                      },
+                      {
+                        "content": "账表一致。"
+                      }
+                    ]
+                  }
+                },
+                "tail": {
+                  "value": {
+                    "kind": "OUTPUT_FRAMES",
+                    "scope": "STEP",
+                    "stepId": "s1",
+                    "operationId": "verify",
+                    "assignmentVersion": 1,
+                    "firstFrameNo": 10,
+                    "frames": [
+                      {
+                        "endFlag": true
+                      }
+                    ]
+                  }
+                },
+                "secondOutput": {
+                  "value": {
+                    "kind": "OUTPUT_FRAMES",
+                    "scope": "STEP",
+                    "stepId": "s2",
+                    "operationId": "review-final",
+                    "assignmentVersion": 2,
+                    "firstFrameNo": 1,
+                    "frames": [
+                      {
+                        "content": "无剩余差异。"
+                      },
+                      {
+                        "endFlag": true
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "提交一个状态或输出批次",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TaskAck"
+                    },
+                    {
+                      "$ref": "#/components/schemas/OutputAck"
+                    }
+                  ]
+                },
+                "examples": {
+                  "state": {
+                    "value": {
+                      "taskId": "task_0123456789abcdef0123456789abcdef",
+                      "status": "RUNNING",
+                      "taskVersion": 2,
+                      "assignmentVersion": 1
+                    }
+                  },
+                  "taskOutput": {
+                    "value": {
+                      "lastAcceptedFrameNo": 2,
+                      "lastOutputSeq": 2
+                    }
+                  },
+                  "stepOutput": {
+                    "value": {
+                      "lastAcceptedFrameNo": 9,
+                      "lastOutputSeq": 8
+                    }
+                  },
+                  "tail": {
+                    "value": {
+                      "lastAcceptedFrameNo": 10,
+                      "lastOutputSeq": 9
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求格式或业务字段不合法",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "INVALID_kind"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "机机凭据缺失或无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "SERVICE_IDENTITY_REQUIRED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "身份未经验证或未获授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_ACCESS_DENIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在、已删除或不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "TASK_RESOURCE_NOT_FOUND"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求与已提交事实冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "FRAME_GAP",
+                      "expectedFrameNo": 10
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "批次或操作超过容量",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "error": {
+                    "value": {
+                      "code": "BATCH_TOO_LARGE"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "产品与 Agent 上报"
+        ],
+        "description": "同一 URL 分别接收状态或输出批次。ACK 仅代表落库。"
+      }
+    },
+    "/workbench/commands": {
+      "post": {
+        "tags": [
+          "Agent 接收"
+        ],
+        "operationId": "receiveWorkbenchCommand",
+        "summary": "Agent 实现：接收控制或回答命令",
+        "description": "这是 Agent 上的示例地址。实际使用登记的完整 HTTPS URL，不是 ChatService 路由。2xx 确认投递，不读取响应体；请按 commandId 去重。",
+        "servers": [
+          {
+            "url": "https://agent.example.invalid",
+            "description": "接入方示例服务器；真实路径由其登记"
+          }
+        ],
+        "security": [
+          {
+            "agentDelivery": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentCommand"
+              },
+              "examples": {
+                "START": {
+                  "value": {
+                    "commandId": "cmd_00000000000000000000000000000001",
+                    "taskId": "task_0123456789abcdef0123456789abcdef",
+                    "action": "START",
+                    "actorUserId": "u1",
+                    "expectedVersion": 1,
+                    "assignmentVersion": 1
+                  }
+                },
+                "PAUSE": {
+                  "value": {
+                    "commandId": "cmd_00000000000000000000000000000002",
+                    "taskId": "task_0123456789abcdef0123456789abcdef",
+                    "action": "PAUSE",
+                    "actorUserId": "u1",
+                    "expectedVersion": 2,
+                    "assignmentVersion": 1
+                  }
+                },
+                "RESUME": {
+                  "value": {
+                    "commandId": "cmd_00000000000000000000000000000003",
+                    "taskId": "task_0123456789abcdef0123456789abcdef",
+                    "action": "RESUME",
+                    "actorUserId": "u1",
+                    "expectedVersion": 5,
+                    "assignmentVersion": 1
+                  }
+                },
+                "TERMINATE": {
+                  "value": {
+                    "commandId": "cmd_00000000000000000000000000000004",
+                    "taskId": "task_0123456789abcdef0123456789abcdef",
+                    "action": "TERMINATE",
+                    "actorUserId": "u1",
+                    "expectedVersion": 2,
+                    "assignmentVersion": 1
+                  }
+                },
+                "ANSWER": {
+                  "value": {
+                    "commandId": "cmd_00000000000000000000000000000005",
+                    "taskId": "task_0123456789abcdef0123456789abcdef",
+                    "action": "ANSWER",
+                    "actorUserId": "u2",
+                    "expectedVersion": 3,
+                    "assignmentVersion": 1,
+                    "interactionId": "i1",
+                    "requestId": "approval1",
+                    "stepId": "s1",
+                    "operationId": "verify",
+                    "answer": {
+                      "label": {
+                        "通过复核？": "通过"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "接收成功，例如 204，无响应体要求。"
+          },
+          "default": {
+            "description": "Agent 自定义的非 2xx；调度器视为投递未成功。"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Create": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "description": "稳定的调用方请求标识。"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "EXTERNAL",
+              "SCHEDULED",
+              "AGENT",
+              "CHAT"
+            ],
+            "description": "触发建单的渠道。"
+          },
+          "taskCreationContext": {
+            "type": "string",
+            "description": "只用于 CHAT，原样传回本轮请求中的短期签名上下文。"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "面向用户的标题。"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "PAUSED",
+              "WAITING_HUMAN",
+              "TERMINATED",
+              "FAILED",
+              "COMPLETED"
+            ],
+            "description": "当前业务状态。"
+          },
+          "l1": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "l2": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "l3": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "sourceProduct": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "creator": {
+            "type": "string",
+            "description": "创建者展示文字。"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "responsibleAgent": {
+            "$ref": "#/components/schemas/Named"
+          },
+          "executingAgents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "description": "当前执行方列表，可为空。"
+          },
+          "agentExecutionStatus": {
+            "type": "string",
+            "description": "接入方自定义机机状态；不透出到前端。"
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "description": "任务参与人；非全部参与人均可答同一待办。"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "businessCode": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "progressSummary": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "collaboratingAgents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            }
+          },
+          "recommendedSkills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            }
+          },
+          "taskContext": {},
+          "extensions": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "plannedStart": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "plannedEnd": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "statusDescription": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId",
+          "channel",
+          "title",
+          "locale",
+          "status",
+          "l1",
+          "sourceProduct",
+          "creator",
+          "owner",
+          "responsibleAgent",
+          "executingAgents",
+          "agentExecutionStatus"
+        ],
+        "description": "CHAT 独有且必填 taskCreationContext；其他渠道禁止携带。executingAgents 必须传，无人执行传 []。"
+      },
+      "Named": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "PlanTime": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "zone": {
+            "type": "string"
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "DAY",
+              "HOUR",
+              "MINUTE"
+            ]
+          }
+        },
+        "required": [
+          "value",
+          "zone",
+          "precision"
+        ]
+      },
+      "TaskAck": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "description": "服务端统一任务标识。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "PAUSED",
+              "WAITING_HUMAN",
+              "TERMINATED",
+              "FAILED",
+              "COMPLETED"
+            ],
+            "description": "当前业务状态。"
+          },
+          "taskVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "整单已提交业务版本。"
+          },
+          "assignmentVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "责任 Agent 指派版本，交接后更新。"
+          },
+          "referenceToken": {
+            "type": "string",
+            "description": "仅对话建单回执含此字段，用于原 Run 展示卡片，不是 API 凭据。"
+          }
+        },
+        "required": [
+          "taskId",
+          "status",
+          "taskVersion",
+          "assignmentVersion"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "expectedFrameNo": {
+            "type": "integer",
+            "format": "int64",
+            "description": "FRAME_GAP 时给出下一期望输入帧号。"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "StateBatch": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "STATE_CHANGE"
+            ]
+          },
+          "eventId": {
+            "type": "string",
+            "description": "同租户任务与调用方范围内的状态批次幂等标识。"
+          },
+          "assignmentVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "责任 Agent 指派版本，交接后更新。"
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "调用方提交时所见的整单版本。"
+          },
+          "changes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "task.updated"
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TaskPatch"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "data"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "task.assigned"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "responsibleAgent": {
+                          "$ref": "#/components/schemas/Named"
+                        }
+                      },
+                      "required": [
+                        "responsibleAgent"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "data"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "group.upsert"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "groupId": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "sortOrder": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "groupId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "data"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "group.removed"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "groupId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "groupId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "data"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "step.upsert"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "stepId": {
+                          "type": "string"
+                        },
+                        "groupId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "title": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "renderRef": {
+                          "type": "string"
+                        },
+                        "sortOrder": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "PENDING",
+                            "RUNNING",
+                            "PAUSED",
+                            "WAITING_HUMAN",
+                            "TERMINATED",
+                            "FAILED",
+                            "COMPLETED",
+                            "SKIPPED"
+                          ]
+                        },
+                        "statusDescription": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "executingAgents": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Named"
+                          }
+                        },
+                        "plannedStart": {
+                          "$ref": "#/components/schemas/PlanTime"
+                        },
+                        "plannedEnd": {
+                          "$ref": "#/components/schemas/PlanTime"
+                        }
+                      },
+                      "required": [
+                        "stepId"
+                      ],
+                      "description": "首次创建还须 title、status、sortOrder；已存在时沿用未传字段。"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "data"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "step.updated"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "stepId": {
+                          "type": "string"
+                        },
+                        "groupId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "title": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "renderRef": {
+                          "type": "string"
+                        },
+                        "sortOrder": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "PENDING",
+                            "RUNNING",
+                            "PAUSED",
+                            "WAITING_HUMAN",
+                            "TERMINATED",
+                            "FAILED",
+                            "COMPLETED",
+                            "SKIPPED"
+                          ]
+                        },
+                        "statusDescription": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "executingAgents": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Named"
+                          }
+                        },
+                        "plannedStart": {
+                          "$ref": "#/components/schemas/PlanTime"
+                        },
+                        "plannedEnd": {
+                          "$ref": "#/components/schemas/PlanTime"
+                        }
+                      },
+                      "required": [
+                        "stepId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "data"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "step.removed"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "stepId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "stepId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "data"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "interaction.requested"
+                      ]
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/InteractionRequest"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "data"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "eventId",
+          "assignmentVersion",
+          "changes"
+        ],
+        "description": "同批原子、仅加一个 taskVersion；交接放最后。expectedVersion 可选，assignmentVersion 必须匹配；稳定 eventId 用于原内容重发。"
+      },
+      "TaskPatch": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "面向用户的标题。"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "progressSummary": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "executingAgents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "description": "当前执行方列表，可为空。"
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            },
+            "description": "任务参与人；非全部参与人均可答同一待办。"
+          },
+          "collaboratingAgents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            }
+          },
+          "recommendedSkills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Named"
+            }
+          },
+          "statusDescription": {
+            "type": "string"
+          },
+          "plannedStart": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "plannedEnd": {
+            "$ref": "#/components/schemas/PlanTime"
+          },
+          "agentExecutionStatus": {
+            "type": "string",
+            "description": "接入方自定义机机状态；不透出到前端。"
+          },
+          "taskContext": {},
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extensions": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "PAUSED",
+              "WAITING_HUMAN",
+              "TERMINATED",
+              "FAILED",
+              "COMPLETED"
+            ],
+            "description": "当前业务状态。"
+          }
+        }
+      },
+      "InteractionRequest": {
+        "type": "object",
+        "properties": {
+          "interactionId": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "稳定的调用方请求标识。"
+          },
+          "agentId": {
+            "type": "string",
+            "description": "本次操作实际执行者；协作者需显式传入。"
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "description": "同一任务内一次操作的唯一标识。"
+          },
+          "answerUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            },
+            "minItems": 1,
+            "maxItems": 64
+          }
+        },
+        "required": [
+          "interactionId",
+          "requestId",
+          "questions",
+          "answerUserIds"
+        ]
+      },
+      "Question": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "multi_select": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "question"
+        ]
+      },
+      "OutputBatch": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "OUTPUT_FRAMES"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "TASK",
+              "STEP"
+            ],
+            "description": "TASK 不传 stepId，STEP 必传。"
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string",
+            "description": "本次操作实际执行者；协作者需显式传入。"
+          },
+          "operationId": {
+            "type": "string",
+            "description": "同一任务内一次操作的唯一标识。"
+          },
+          "assignmentVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "责任 Agent 指派版本，交接后更新。"
+          },
+          "firstFrameNo": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "该操作本批第一个原始帧号。"
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "单条原始 DomainAgent 帧，例如 {content: ...}，结构取决于帧类型。"
+            },
+            "minItems": 1,
+            "description": "默认每批最多 128 帧（部署可调），原始帧与展示事件不必一一对应。"
+          }
+        },
+        "required": [
+          "kind",
+          "scope",
+          "operationId",
+          "assignmentVersion",
+          "firstFrameNo",
+          "frames"
+        ],
+        "description": "scope=STEP 必须有 stepId；TASK 必须完全省略。frames 只接受完整 JSON 对象，非 SSE 字符串。协作者传 agentId。首输入帧 1，重发不换 operationId。"
+      },
+      "OutputAck": {
+        "type": "object",
+        "properties": {
+          "lastAcceptedFrameNo": {
+            "type": "integer",
+            "format": "int64",
+            "description": "本次操作已提交的最后一个输入帧号（含心跳）。"
+          },
+          "lastOutputSeq": {
+            "type": "integer",
+            "format": "int64",
+            "description": "这个范围的展示事件水位；可能不变，也可能一帧增加多个。"
+          }
+        },
+        "required": [
+          "lastAcceptedFrameNo",
+          "lastOutputSeq"
+        ]
+      },
+      "AgentCommand": {
+        "type": "object",
+        "properties": {
+          "commandId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string",
+            "description": "服务端统一任务标识。"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "START",
+              "PAUSE",
+              "RESUME",
+              "TERMINATE",
+              "ANSWER"
+            ]
+          },
+          "actorUserId": {
+            "type": "string",
+            "description": "实际发出动作的用户。"
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "调用方提交时所见的整单版本。"
+          },
+          "assignmentVersion": {
+            "type": "integer",
+            "format": "int64",
+            "description": "责任 Agent 指派版本，交接后更新。"
+          },
+          "interactionId": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "稳定的调用方请求标识。"
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string",
+            "description": "同一任务内一次操作的唯一标识。"
+          },
+          "answer": {
+            "$ref": "#/components/schemas/Answer"
+          }
+        },
+        "required": [
+          "commandId",
+          "taskId",
+          "action",
+          "actorUserId",
+          "expectedVersion",
+          "assignmentVersion"
+        ],
+        "description": "ANSWER 同时含 interactionId、requestId、answer；stepId 和 operationId 来自原待办。其他动作无答案字段。"
+      },
+      "Answer": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "maxItems": 128
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "client": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Task-Client"
+      },
+      "agentDelivery": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "接收端独立的出站密钥，不是 X-Task-Client 的入站密钥。"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "产品与 Agent 上报",
+      "externalDocs": {
+        "url": "../workbench-agent-integration.md",
+        "description": "完整接入示例"
+      },
+      "description": "产品、定时任务和领域 Agent 调用 ChatService。"
+    },
+    {
+      "name": "Agent 接收",
+      "externalDocs": {
+        "url": "../workbench-agent-integration.md",
+        "description": "完整接入示例"
+      },
+      "description": "ChatService 调用接入方登记的 HTTPS 地址。"
+    }
+  ],
+  "servers": [
+    {
+      "url": "/",
+      "description": "当前 ChatService 部署的业务入口；Agent 命令操作使用其独立服务器。"
+    }
+  ]
+}

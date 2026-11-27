@@ -21,6 +21,7 @@ import com.huawei.it.ex.one.application.service.agentdatapersistence.AgentDataPe
 import com.huawei.it.ex.one.application.service.observation.TurnTraceCoordinator;
 import com.huawei.it.ex.one.application.service.runtime.RuntimeBindingApplicationService;
 import com.huawei.it.ex.one.application.service.security.PermissionChecker;
+import com.huawei.it.ex.one.application.service.workbench.WorkbenchTaskSessions;
 import com.huawei.it.ex.one.common.error.SystemErrorCode;
 import com.huawei.it.ex.one.common.error.SystemErrorLogEntry;
 import com.huawei.it.ex.one.common.logging.AppLogger;
@@ -86,6 +87,12 @@ public class SessionApplicationService implements ChatSessionFacade {
     private static final int MAX_BATCH_DELETE_SIZE = 100;
 
     private final SessionRepository sessionRepository;
+    private WorkbenchTaskSessions workbenchTaskSessions;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setWorkbenchTaskSessions(WorkbenchTaskSessions workbenchTaskSessions) {
+        this.workbenchTaskSessions = workbenchTaskSessions;
+    }
     private final ChatMessageRepository messageRepository;
     private final IdGenerator idGenerator;
     private final PermissionChecker permissionChecker;
@@ -450,6 +457,7 @@ public class SessionApplicationService implements ChatSessionFacade {
         List<ChatSession> deleted = new ArrayList<>(sessions.size());
         for (ChatSession session : sessions) {
             ChatSession deletedSession = saveWith(session, session.title(), STATUS_DELETED);
+            if (workbenchTaskSessions != null) workbenchTaskSessions.unlinkDeleted(user, session.id());
             if (runtimeBindingService != null) {
                 runtimeBindingService.cancelAllForSessionInTransaction(
                         user.tenantId(), user.ownerUserId(), session.id());

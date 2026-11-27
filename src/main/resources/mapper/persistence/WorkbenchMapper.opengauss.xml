@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.huawei.it.ex.one.infrastructure.persistence.WorkbenchMapper">
+    <!-- 以调用方请求号竞争创建任务，保留首次回执。入参：taskId、tenant、owner、caller、requestId、hash、ack、agent、status、app、l1、l2、l3、title、json。 -->
+    <insert id="insertTask">
+        INSERT INTO fin_ex_wb_task_t(task_id,tenant_id,owner_user_id,caller_id,create_request_id,create_hash,create_ack_json,responsible_agent_id,assignment_version,task_version,status,source_app_id,l1_key,l1_name,l2_key,l3_key,title,snapshot_json)
+        VALUES(#{taskId},#{tenant},#{owner},#{caller},#{requestId},#{hash},#{ack},#{agent},1,1,#{status},#{app},#{l1},#{l1Name},#{l2},#{l3},#{title},#{json})
+        ON DUPLICATE KEY UPDATE create_hash=fin_ex_wb_task_t.create_hash
+    </insert>
+
+    <!-- 读取建单指纹和首次回执，识别重发。入参：tenant、caller、requestId。 -->
+    <select id="findCreation" resultType="map">
+        SELECT task_id,create_hash,create_ack_json FROM fin_ex_wb_task_t WHERE tenant_id=#{tenant} AND caller_id=#{caller} AND create_request_id=#{requestId}
+    </select>
+
+    <!-- 锁定租户内的有效任务，串行裁决同时到达的写入。入参：tenant、taskId。 -->
+    <select id="lockTask" resultType="string">
+        SELECT snapshot_json FROM fin_ex_wb_task_t WHERE tenant_id=#{tenant} AND task_id=#{taskId} AND deleted_at IS NULL FOR UPDATE
+    </select>
+
+    <!-- 读取一致快照并保护后续子表读取。入参：tenant、taskId。 -->
+    <select id="shareTask" resultType="string">
+        SELECT snapshot_json FROM fin_ex_wb_task_t WHERE tenant_id=#{tenant} AND task_id=#{taskId} AND deleted_at IS NULL FOR SHARE
+    </select>
+
+    <!-- 按旧版本条件更新整单快照。入参：agent、assignment、version、status、title、json、taskId、previous。 -->
+    <update id="updateTask">
+        UPDATE fin_ex_wb_task_t SET responsible_agent_id=#{agent},assignment_version=#{assignment},task_version=#{version},status=#{status},title=#{title},snapshot_json=#{json},last_update_date=CURRENT_TIMESTAMP WHERE task_id=#{taskId} AND task_version=#{previous}
+    </update>
+
+    <!-- 只允许已完成或已终止的任务逻辑删除。入参：taskId。 -->
+    <update id="deleteTask">
+        UPDATE fin_ex_wb_task_t SET deleted_at=CURRENT_TIMESTAMP WHERE task_id=#{taskId} AND status IN ('COMPLETED','TERMINATED') AND deleted_at IS NULL
+    </update>
+
+    <!-- 增加当前版本的参与人。入参：taskId、user、name。 -->
+    <insert id="insertMember">
+        INSERT INTO fin_ex_wb_task_member_t(task_id,user_id,display_name) VALUES(#{taskId},#{user},#{name})
+    </insert>
+
+    <!-- 在同一事务内替换旧参与人集合。入参：taskId。 -->
+    <delete id="clearMembers">
+        DELETE FROM fin_ex_wb_task_member_t WHERE task_id=#{taskId}
+    </delete>
+    <!-- 锁读归属匹配且未删除的来源会话。入参：tenant、user、session。 -->
+    <select id="lockSourceSession" resultType="string">
+        SELECT id FROM fin_ex_chat_session_t WHERE tenant_id=#{tenant} AND user_id=#{user} AND id=#{session} AND status!='DELETED' FOR UPDATE
+    </select>
+    <!-- 解除个人会话关系，不变更任务指派或状态。入参：tenant、user、session。 -->
+    <delete id="unlinkDeleted">
+        DELETE FROM fin_ex_wb_task_session_t WHERE session_id=#{session} AND user_id=#{user}
+        AND task_id IN (SELECT task_id FROM fin_ex_wb_task_t WHERE tenant_id=#{tenant})
+    </delete>
+
+    <!-- 确认调用用户仍在任务成员列表。入参：taskId、user。 -->
+    <select id="member" resultType="int">
+        SELECT COUNT(*) FROM fin_ex_wb_task_member_t WHERE task_id=#{taskId} AND user_id=#{user}
+    </select>
+
+    <!-- 按责任人或参与人授权分页筛选任务。入参：field、schemaVersion、tenant、user、app、text、number、time、bool、searchText、status、l1、l2、l3、limit、offset。 -->
+    <select id="listTasks" resultType="string">
+        SELECT t.snapshot_json FROM fin_ex_wb_task_t t
+        <if test="field != null">JOIN fin_ex_wb_task_ext_value_t x ON x.task_id=t.task_id AND x.field_key=#{field} AND x.schema_version=#{schemaVersion}</if>
+        WHERE tenant_id=#{tenant} AND deleted_at IS NULL AND (owner_user_id=#{user} OR EXISTS (SELECT 1 FROM fin_ex_wb_task_member_t m WHERE m.task_id=t.task_id AND m.user_id=#{user}))
+        <if test="app != null"> AND t.source_app_id=#{app}</if>
+        <if test="relation == 'OWNER'"> AND t.owner_user_id=#{user}</if>
+        <if test="relation == 'PARTICIPANT'"> AND EXISTS (SELECT 1 FROM fin_ex_wb_task_member_t p WHERE p.task_id=t.task_id AND p.user_id=#{user})</if>
+        <if test="text != null"> AND x.text_value=#{text}</if><if test="number != null"> AND x.number_value=#{number}</if>
+        <if test="time != null"> AND x.time_value=#{time}</if><if test="bool != null"> AND x.bool_value=#{bool}</if>
+        <if test="searchText != null"> AND x.text_value ILIKE #{searchText} ESCAPE '!'</if>
+        <if test="status != null"> AND status=#{status}</if><if test="l1 != null"> AND (l1_key=#{l1} OR l1_name=#{l1})</if><if test="l2 != null"> AND l2_key=#{l2}</if><if test="l3 != null"> AND l3_key=#{l3}</if>
+        ORDER BY
+        <if test="sortType != null"><choose><when test="sortType == 'TEXT'">x.text_value</when>
+            <when test="sortType == 'NUMBER'">x.number_value</when><when test="sortType == 'TIME'">x.time_value</when>
+            <otherwise>x.bool_value</otherwise></choose><if test="descending"> DESC</if>,</if>
+        t.creation_date DESC,t.task_id LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 追加一个已提交的业务版本和来源事件回执。入参：taskId、version、caller、eventId、hash、changes、ack。 -->
+    <insert id="insertEvent">
+        INSERT INTO fin_ex_wb_task_event_t(task_id,task_version,caller_id,source_event_id,payload_hash,changes_json,ack_json)
+        VALUES(#{taskId},#{version},#{caller},#{eventId},#{hash},#{changes},#{ack})
+    </insert>
+
+    <!-- 核对已接受的来源事件与内容指纹。入参：taskId、caller、eventId。 -->
+    <select id="findEvent" resultType="map">
+        SELECT ack_json,payload_hash FROM fin_ex_wb_task_event_t WHERE task_id=#{taskId} AND caller_id=#{caller} AND source_event_id=#{eventId}
+    </select>
+
+    <!-- 从上一个业务版本按序恢复增量。入参：taskId、cursor、limit。 -->
+    <select id="events" resultType="map">
+        SELECT task_version,changes_json FROM fin_ex_wb_task_event_t WHERE task_id=#{taskId} AND task_version &gt; #{cursor} ORDER BY task_version LIMIT #{limit}
+    </select>
+
+    <!-- 创建、移动或逻辑移除一个步骤分组。入参：taskId、id、sort、removed、json。 -->
+    <insert id="saveGroup">
+        INSERT INTO fin_ex_wb_task_group_t(task_id,group_id,sort_order,removed,snapshot_json)
+        VALUES(#{taskId},#{id},#{sort},#{removed},#{json})
+        ON DUPLICATE KEY UPDATE sort_order=EXCLUDED.sort_order,removed=EXCLUDED.removed,snapshot_json=EXCLUDED.snapshot_json,last_update_date=CURRENT_TIMESTAMP
+    </insert>
+
+    <!-- 获取本任务指定分组，包括已移除标记。入参：taskId、id。 -->
+    <select id="findGroup" resultType="string">
+        SELECT snapshot_json FROM fin_ex_wb_task_group_t WHERE task_id=#{taskId} AND group_id=#{id}
+    </select>
+
+    <!-- 按展示顺序读取当前分组。入参：taskId。 -->
+    <select id="listGroups" resultType="string">
+        SELECT snapshot_json FROM fin_ex_wb_task_group_t WHERE task_id=#{taskId} AND removed=false ORDER BY sort_order,group_id
+    </select>
+
+    <!-- 保存动态计划中的步骤、状态和摘要。入参：taskId、id、sort、removed、json、group、status、version。 -->
+    <insert id="saveStep">
+        INSERT INTO fin_ex_wb_task_step_t(task_id,step_id,sort_order,removed,snapshot_json,group_id,status,step_version)
+        VALUES(#{taskId},#{id},#{sort},#{removed},#{json},#{group},#{status},#{version})
+        ON DUPLICATE KEY UPDATE sort_order=EXCLUDED.sort_order,removed=EXCLUDED.removed,snapshot_json=EXCLUDED.snapshot_json,group_id=EXCLUDED.group_id,status=EXCLUDED.status,step_version=EXCLUDED.step_version,last_update_date=CURRENT_TIMESTAMP
+    </insert>
+
+    <!-- 读取本任务的步骤以校验归属和状态。入参：taskId、id。 -->
+    <select id="findStep" resultType="string">
+        SELECT snapshot_json FROM fin_ex_wb_task_step_t WHERE task_id=#{taskId} AND step_id=#{id}
+    </select>
+
+    <!-- 按计划顺序读取未移除步骤。入参：taskId。 -->
+    <select id="listSteps" resultType="string">
+        SELECT snapshot_json FROM fin_ex_wb_task_step_t WHERE task_id=#{taskId} AND removed=false ORDER BY sort_order,step_id
+    </select>
+
+    <!-- 判断分组是否还有未移走的步骤。入参：taskId、id。 -->
+    <select id="groupInUse" resultType="int">
+        SELECT COUNT(*) FROM fin_ex_wb_task_step_t WHERE task_id=#{taskId} AND group_id=#{id} AND removed=false
+    </select>
+
+    <!-- 保存操作者和动作，不复制正文或凭据。入参：id、taskId、actor、type、object、action、outcome。 -->
+    <insert id="audit">
+        INSERT INTO fin_ex_wb_task_audit_t(audit_id,task_id,actor_id,actor_type,object_id,action_type,outcome) VALUES(#{id},#{taskId},#{actor},#{type},#{object},#{action},#{outcome})
+    </insert>
+
+    <!-- 分页读取该任务的业务操作日志。入参：taskId、limit、offset。 -->
+    <select id="logs" resultType="map">
+        SELECT audit_id,actor_id,actor_type,object_id,action_type,outcome,creation_date FROM fin_ex_wb_task_audit_t WHERE task_id=#{taskId} ORDER BY creation_date DESC,audit_id LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 关联主会话或当前参与人的私聊。入参：taskId、user、session、type。 -->
+    <insert id="insertSession">
+        INSERT INTO fin_ex_wb_task_session_t(task_id,user_id,session_id,relation_type) VALUES(#{taskId},#{user},#{session},#{type})
+    </insert>
+
+    <!-- 查找当前用户的任务会话。入参：taskId、user。 -->
+    <select id="session" resultType="string">
+        SELECT session_id FROM fin_ex_wb_task_session_t WHERE task_id=#{taskId} AND user_id=#{user}
+    </select>
+
+    <!-- 根据归属与会话确定可信路由。入参：session、user、tenant。 -->
+    <select id="sessionTask" resultType="string">
+        SELECT s.task_id FROM fin_ex_wb_task_session_t s JOIN fin_ex_wb_task_t t ON t.task_id=s.task_id WHERE s.session_id=#{session} AND s.user_id=#{user} AND t.tenant_id=#{tenant}
+    </select>
+
+    <!-- 解除已删除个人会话的关联。入参：taskId、user。 -->
+    <delete id="dropSession">
+        DELETE FROM fin_ex_wb_task_session_t WHERE task_id=#{taskId} AND user_id=#{user}
+    </delete>
+
+    <!-- 保存权威人工确认项和允许回答的成员。入参：taskId、id、agent、assignment、external、step、operation、json。 -->
+    <insert id="insertInteraction">
+        INSERT INTO fin_ex_wb_task_interaction_t(task_id,interaction_id,agent_id,assignment_version,external_request_id,step_id,operation_id,status,request_json) VALUES(#{taskId},#{id},#{agent},#{assignment},#{external},#{step},#{operation},'WAITING',#{json})
+    </insert>
+
+    <!-- 在处理答案时核对原始问卷及权限。入参：taskId、id。 -->
+    <select id="interaction" resultType="map">
+        SELECT agent_id,status,request_json,answer_json FROM fin_ex_wb_task_interaction_t WHERE task_id=#{taskId} AND interaction_id=#{id}
+    </select>
+
+    <!-- 获取待办与历史答案供权限投影。入参：taskId。 -->
+    <select id="interactions" resultType="map">
+        SELECT status,request_json,answer_json FROM fin_ex_wb_task_interaction_t WHERE task_id=#{taskId} ORDER BY creation_date,interaction_id
+    </select>
+
+    <!-- 在当前指派和等待状态下原子接受答案。入参：json、user、taskId、id、assignment。 -->
+    <update id="answer">
+        UPDATE fin_ex_wb_task_interaction_t SET status='ANSWERED',answer_json=#{json},answered_by=#{user},last_update_date=CURRENT_TIMESTAMP WHERE task_id=#{taskId} AND interaction_id=#{id} AND status='WAITING' AND assignment_version=#{assignment}
+    </update>
+
+    <!-- 关闭终态或交接时尚未回答的确认项。入参：taskId。 -->
+    <update id="cancelWaits">
+        UPDATE fin_ex_wb_task_interaction_t SET status='CANCELLED',last_update_date=CURRENT_TIMESTAMP WHERE task_id=#{taskId} AND status='WAITING'
+    </update>
+
+    <!-- 持久化待投递的用户操作。入参：id、taskId、user、agent、assignment、key、hash、type、json。 -->
+    <insert id="insertCommand">
+        INSERT INTO fin_ex_wb_task_command_t(command_id,task_id,actor_id,agent_id,assignment_version,idem_key,payload_hash,command_type,payload_json,delivery_status,attempt_count,next_attempt_at) VALUES(#{id},#{taskId},#{user},#{agent},#{assignment},#{key},#{hash},#{type},#{json},'PENDING',0,CURRENT_TIMESTAMP)
+    </insert>
+
+    <!-- 识别重复命令并返回原命令编号。入参：taskId、user、key。 -->
+    <select id="priorCommand" resultType="map">
+        SELECT command_id,payload_hash,delivery_status FROM fin_ex_wb_task_command_t WHERE task_id=#{taskId} AND actor_id=#{user} AND idem_key=#{key}
+    </select>
+
+    <!-- 有界扫描新命令和租约过期命令。入参：无。 -->
+    <select id="dueCommands" resultType="string">
+        SELECT command_id FROM fin_ex_wb_task_command_t WHERE delivery_status IN ('PENDING','IN_FLIGHT') AND next_attempt_at &lt;= CURRENT_TIMESTAMP ORDER BY next_attempt_at LIMIT 16
+    </select>
+
+    <!-- 使用租约令牌防止并发重复投递。入参：lease、until、id。 -->
+    <update id="claimCommand">
+        UPDATE fin_ex_wb_task_command_t SET lease_token=#{lease},delivery_status='IN_FLIGHT',attempt_count=attempt_count+1,next_attempt_at=#{until} WHERE command_id=#{id} AND next_attempt_at &lt;= CURRENT_TIMESTAMP AND delivery_status IN ('PENDING','IN_FLIGHT')
+    </update>
+
+    <!-- 读取命令与当前任务指派，防止旧指派推进。入参：id。 -->
+    <select id="command" resultType="map">
+        SELECT c.agent_id,c.assignment_version,c.attempt_count,c.payload_json,t.tenant_id,t.source_app_id,t.status AS task_status,t.assignment_version AS current_assignment,t.deleted_at FROM fin_ex_wb_task_command_t c JOIN fin_ex_wb_task_t t ON c.task_id=t.task_id WHERE command_id=#{id}
+    </select>
+
+    <!-- 按租约令牌提交投递结果或退避时间。入参：status、next、id、lease。 -->
+    <update id="releaseCommand">
+        UPDATE fin_ex_wb_task_command_t SET delivery_status=#{status},next_attempt_at=#{next},lease_token=NULL,last_update_date=CURRENT_TIMESTAMP WHERE command_id=#{id} AND lease_token=#{lease}
+    </update>
+
+    <!-- 为一个执行范围首次建立输出游标。入参：taskId、scope。 -->
+    <insert id="ensureStream">
+        INSERT INTO fin_ex_wb_task_output_stream_t(task_id,scope_key,last_output_seq) VALUES(#{taskId},#{scope},0) ON DUPLICATE KEY UPDATE last_output_seq=fin_ex_wb_task_output_stream_t.last_output_seq
+    </insert>
+
+    <!-- 锁读已接受的最大输出序号。入参：taskId、scope。 -->
+    <select id="lockStream" resultType="long">
+        SELECT last_output_seq FROM fin_ex_wb_task_output_stream_t WHERE task_id=#{taskId} AND scope_key=#{scope} FOR UPDATE
+    </select>
+
+    <!-- 读取详情对应的可恢复输出位置。入参：taskId、scope。 -->
+    <select id="streamSeq" resultType="long">
+        SELECT last_output_seq FROM fin_ex_wb_task_output_stream_t WHERE task_id=#{taskId} AND scope_key=#{scope}
+    </select>
+
+    <!-- 在批次事务中推进输出水位。入参：seq、taskId、scope。 -->
+    <update id="advanceStream">
+        UPDATE fin_ex_wb_task_output_stream_t SET last_output_seq=#{seq}, last_update_date=CURRENT_TIMESTAMP WHERE task_id=#{taskId} AND scope_key=#{scope}
+    </update>
+
+    <!-- 读取单次操作的解析检查点与输入水位。入参：taskId、operation。 -->
+    <select id="operation" resultType="map">
+        SELECT scope_key,agent_id,status,assignment_version,last_frame_no,checkpoint_json FROM fin_ex_wb_task_operation_t WHERE task_id=#{taskId} AND operation_id=#{operation} FOR UPDATE
+    </select>
+
+    <!-- 同步保存本次操作正文和跨批解析状态。入参：taskId、scope、operation、agent、assignment、last、status、content、checkpoint。 -->
+    <insert id="saveOperation">
+        INSERT INTO fin_ex_wb_task_operation_t(task_id,scope_key,operation_id,agent_id,assignment_version,last_frame_no,status,content,checkpoint_json)
+        VALUES(#{taskId},#{scope},#{operation},#{agent},#{assignment},#{last},#{status},#{content},#{checkpoint})
+        ON DUPLICATE KEY UPDATE last_frame_no=EXCLUDED.last_frame_no,status=EXCLUDED.status,content=EXCLUDED.content,checkpoint_json=EXCLUDED.checkpoint_json,last_update_date=CURRENT_TIMESTAMP
+    </insert>
+
+    <!-- 读取一个范围中各次操作的正文。入参：taskId、scope。 -->
+    <select id="operations" resultType="map">
+        SELECT operation_id,agent_id,status,content FROM fin_ex_wb_task_operation_t WHERE task_id=#{taskId} AND scope_key=#{scope} ORDER BY creation_date,operation_id LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 保存新展示分段或续写未闭合的卡片分段。入参：taskId、operation、ord、json。 -->
+    <insert id="savePart">
+        INSERT INTO fin_ex_wb_task_op_part_t(task_id,operation_id,part_order,part_json) VALUES(#{taskId},#{operation},#{ord},#{json}) ON DUPLICATE KEY UPDATE part_json=EXCLUDED.part_json,last_update_date=CURRENT_TIMESTAMP
+    </insert>
+
+    <!-- 批量读取一个范围的分段，不执行逐操作查询。入参：taskId、scope。 -->
+    <select id="parts" resultType="map">
+        SELECT p.operation_id,p.part_order,p.part_json FROM fin_ex_wb_task_op_part_t p WHERE p.task_id=#{taskId} AND p.operation_id IN
+        (SELECT operation_id FROM fin_ex_wb_task_operation_t WHERE task_id=#{taskId} AND scope_key=#{scope}
+        ORDER BY creation_date,operation_id LIMIT #{limit} OFFSET #{offset}) ORDER BY p.operation_id,p.part_order
+    </select>
+
+    <!-- 保存输入批次指纹和对应已归一化的回放。入参：taskId、scope、operation、first、last、hash、startSeq、seq、json、expiry。 -->
+    <insert id="insertFrame">
+        INSERT INTO fin_ex_wb_task_output_frame_t(task_id,scope_key,operation_id,first_frame_no,last_frame_no,payload_hash,first_output_seq,last_output_seq,events_json,expires_at) VALUES(#{taskId},#{scope},#{operation},#{first},#{last},#{hash},#{startSeq},#{seq},#{json},#{expiry})
+    </insert>
+
+    <!-- 核对旧批次指纹并获取原始确认水位。入参：taskId、operation、first。 -->
+    <select id="frame" resultType="map">
+        SELECT payload_hash,last_frame_no,last_output_seq FROM fin_ex_wb_task_output_frame_t WHERE task_id=#{taskId} AND operation_id=#{operation} AND first_frame_no=#{first}
+    </select>
+
+    <!-- 按游标恢复仍在保留期的执行输出。入参：taskId、scope、cursor、limit。 -->
+    <select id="frames" resultType="string">
+        SELECT events_json FROM fin_ex_wb_task_output_frame_t WHERE task_id=#{taskId} AND scope_key=#{scope} AND last_output_seq &gt; #{cursor}
+        AND last_output_seq &gt;= first_output_seq AND expires_at &gt; CURRENT_TIMESTAMP ORDER BY first_output_seq,first_frame_no LIMIT #{limit}
+    </select>
+
+    <!-- 每次只删除少量过期回放，不删除操作正文。入参：无。 -->
+    <delete id="pruneFrames">
+        DELETE FROM fin_ex_wb_task_output_frame_t WHERE (task_id,operation_id,first_frame_no) IN (SELECT task_id,operation_id,first_frame_no FROM fin_ex_wb_task_output_frame_t WHERE expires_at &lt; CURRENT_TIMESTAMP ORDER BY expires_at LIMIT 256)
+    </delete>
+
+    <!-- 获取该产品类别指定或最新发布的扩展字典。入参：tenant、app、category、version。 -->
+    <select id="schema" resultType="map">
+        SELECT definition_json,schema_version FROM fin_ex_wb_task_schema_t WHERE tenant_id=#{tenant} AND app_id=#{app} AND category_key=#{category}
+        <if test="version != null">AND schema_version=#{version}</if> ORDER BY creation_date DESC,schema_version DESC LIMIT 1
+    </select>
+
+    <!-- 保存已通过版本化字典校验的类型化值。入参：taskId、version、key、text、number、time、bool。 -->
+    <insert id="indexValue">
+        INSERT INTO fin_ex_wb_task_ext_value_t(task_id,schema_version,field_key,text_value,number_value,time_value,bool_value) VALUES(#{taskId},#{version},#{key},#{text},#{number},#{time},#{bool})
+    </insert>
+    <!-- 在事务中替换旧的扩展字段投影。入参：taskId。 -->
+    <delete id="clearValues">
+        DELETE FROM fin_ex_wb_task_ext_value_t WHERE task_id=#{taskId}
+    </delete>
+    <!-- 先取得操作归属，再校验同一编号是否已被其他范围使用。入参：taskId、scope、operation、agent、assignment。 -->
+    <insert id="reserveOperation">
+        INSERT INTO fin_ex_wb_task_operation_t(task_id,scope_key,operation_id,agent_id,assignment_version,last_frame_no,status,content,checkpoint_json)
+        VALUES(#{taskId},#{scope},#{operation},#{agent},#{assignment},0,'RUNNING',NULL,'{}')
+        ON DUPLICATE KEY UPDATE last_frame_no=fin_ex_wb_task_operation_t.last_frame_no
+    </insert>
+    <!-- 仅统计该任务的当前计划，已移除步骤不计入总数。入参：taskId。 -->
+    <select id="stepCounts" resultType="map">
+        SELECT COUNT(*) AS total,COUNT(CASE WHEN status='COMPLETED' THEN 1 END) AS completed
+        FROM fin_ex_wb_task_step_t WHERE task_id=#{taskId} AND removed=false
+    </select>
+</mapper>

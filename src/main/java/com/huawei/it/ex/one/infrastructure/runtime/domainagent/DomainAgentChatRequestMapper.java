@@ -7,6 +7,7 @@ package com.huawei.it.ex.one.infrastructure.runtime.domainagent;
 import com.huawei.it.ex.one.application.config.DomainAgentProperties;
 import com.huawei.it.ex.one.application.integration.agent.AgentRuntimeInteractionResponseRequest;
 import com.huawei.it.ex.one.application.integration.agent.DomainAgentRequest;
+import com.huawei.it.ex.one.application.service.workbench.WorkbenchTaskChatBinding;
 import com.huawei.it.ex.one.domain.document.UploadedDocument;
 import com.huawei.it.ex.one.domain.observation.ObservationMetadata;
 
@@ -28,6 +29,12 @@ import java.util.Map;
 @Component
 public class DomainAgentChatRequestMapper {
     private final DomainAgentProperties properties;
+    private WorkbenchTaskChatBinding workbenchTaskBinding;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setWorkbenchTaskBinding(WorkbenchTaskChatBinding workbenchTaskBinding) {
+        this.workbenchTaskBinding = workbenchTaskBinding;
+    }
 
     public DomainAgentChatRequestMapper(DomainAgentProperties properties) {
         this.properties = properties;
@@ -55,6 +62,7 @@ public class DomainAgentChatRequestMapper {
         next.put("skillId", request.domainAgentId());
         next.put("query", request.query());
         next.put("sessionId", sessionId(request));
+        if (workbenchTaskBinding != null) workbenchTaskBinding.decorate(request, next);
         return Collections.unmodifiableMap(next);
     }
 

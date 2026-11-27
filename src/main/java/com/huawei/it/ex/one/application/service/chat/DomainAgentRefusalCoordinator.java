@@ -293,6 +293,8 @@ final class DomainAgentRefusalCoordinator {
         if (refusal == null) {
             return Flux.empty();
         }
+        // A private task conversation cannot reassign responsibility by falling back to ordinary routing.
+        if (routeResolutionCoordinator.workbenchTaskConversation(context.user(), context.session().id())) return Flux.empty();
         context.bindingRef().set(bindingPolicy.markRejectedAutomatic(context.bindingRef().get(), refusal));
         String currentDomainAgentId = context.route().selectedAgentCode();
         Set<String> rejected = new HashSet<>(context.rejectedDomainAgentIds());

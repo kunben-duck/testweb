@@ -57,6 +57,10 @@ public class ChatWebSocketProtocolService {
     private final ChatStreamProperties chatStreamProperties;
     private final ObjectMapper objectMapper;
     private UserNotificationBus notificationBus;
+    private WorkbenchTaskTopicSubscriptions workbenchTaskTopics;
+
+    @Autowired(required = false)
+    void setWorkbenchTaskTopics(WorkbenchTaskTopicSubscriptions workbenchTaskTopics) { this.workbenchTaskTopics = workbenchTaskTopics; }
 
     @Autowired
     void setNotificationBus(UserNotificationBus notificationBus) {
@@ -236,6 +240,10 @@ public class ChatWebSocketProtocolService {
         if (topicId == null || topicId.isBlank()) {
             outbound.emit(ChatWebSocketEnvelopeDto.error(commandId, "BAD_WS_MESSAGE", "topicId 不能为空"));
             return Mono.empty();
+        }
+        if (workbenchTaskTopics != null && topicId.startsWith("task:")) {
+            return workbenchTaskTopics.subscribe(new WorkbenchTaskTopicSubscriptions.Request(connectionId, commandId, topicId, afterSeq),
+                    user, outbound);
         }
         return Mono.fromCallable(() -> chatStreamService.ensureRunTopicAccessible(user, topicId))
                 .subscribeOn(Schedulers.boundedElastic())

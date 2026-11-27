@@ -5,6 +5,7 @@
 package com.huawei.it.ex.one.infrastructure.runtime.domainagent;
 
 import com.huawei.it.ex.one.application.config.DomainAgentProperties;
+import com.huawei.it.ex.one.application.service.workbench.WorkbenchTaskAccess;
 import com.huawei.it.ex.one.domain.chat.ChatEvent;
 import com.huawei.it.ex.one.domain.chat.ChatPayloadMaps;
 import com.huawei.it.ex.one.domain.chat.MessageCompletedEvent;
@@ -40,6 +41,10 @@ public class DomainAgentResponseNormalizer {
     private final DomainAgentControlEventMapper controlEventMapper;
     private final int maxPendingFrameBytes;
     private final boolean asyncTaskEnabled;
+    private WorkbenchTaskAccess workbenchTaskAccess;
+
+    @Autowired(required = false)
+    void setWorkbenchTaskAccess(WorkbenchTaskAccess workbenchTaskAccess) { this.workbenchTaskAccess = workbenchTaskAccess; }
 
     public DomainAgentResponseNormalizer(ObjectMapper objectMapper) {
         this(objectMapper, new DomainAgentProperties());
@@ -406,6 +411,9 @@ public class DomainAgentResponseNormalizer {
                     Map.of("value", truncate(root.asText(""))))));
         }
         // 心跳整帧仅用于传输保活，不刷新正文/思考缓存，也不进入业务事件及持久化链路。
+        if (workbenchTaskAccess != null && workbenchTaskAccess.enabled() && Set.of("task.reference", "task.action.proposed").contains(root.path("type").asText())) {
+            return workbenchTaskCard(runId, sessionId, root);
+        }
         if ("heartbeat".equals(text(root, "type"))) {
             return List.of();
         }
@@ -439,6 +447,25 @@ public class DomainAgentResponseNormalizer {
         }
         // 同帧可同时有状态、卡片与正文；按固定顺序拆出标准事件，事件身份始终使用可信入参。
         return displayEvents(runId, sessionId, root, state, events);
+    }
+
+    private List<ChatEvent> workbenchTaskCard(String runId, String sessionId, JsonNode root) {
+        String task = text(root, "taskId");
+        String type = text(root, "type");
+        Map<String, Object> card = new LinkedHashMap<>();
+        if ("task.reference".equals(type)) {
+            if (!workbenchTaskAccess.validReference(task, runId, sessionId, text(root, "referenceToken"))) return List.of();
+        } else {
+            long version = root.path("expectedVersion").asLong(-1);
+            if (!workbenchTaskAccess.validAction(task, runId, sessionId, version, text(root, "taskActionContext"))) return List.of();
+            String action = root.path("action").asText();
+            if (!Set.of("START", "PAUSE", "RESUME", "TERMINATE", "ANSWER").contains(action)) return List.of();
+            card.put("action", action);
+            card.put("expectedVersion", version);
+            if ("ANSWER".equals(action)) putIfPresent(card, "interactionId", text(root, "interactionId"));
+        }
+        card.putAll(Map.of("source", "domain-agent", "sourceType", type, "cardType", type, "taskId", task));
+        return List.of(RuntimeEvent.card(runId, sessionId, card));
     }
 
     private List<ChatEvent> displayEvents(String runId, String sessionId, JsonNode root,
@@ -1131,6 +1158,20 @@ public class DomainAgentResponseNormalizer {
      * 单次 DomainAgent eventStream 的内容解析状态。
      */
     public static final class DomainAgentStreamState {
+        /** Only complete JSON frames enter the task API; no transport fragment is checkpointed. */
+        public record DisplayCursor(boolean inThinking, String pending) { }
+
+        public DisplayCursor displayCursor() { return new DisplayCursor(inThinking, pending); }
+
+        public static DomainAgentStreamState resume(DisplayCursor cursor) {
+            DomainAgentStreamState state = new DomainAgentStreamState();
+            if (cursor != null) {
+                state.inThinking = cursor.inThinking();
+                state.pending = cursor.pending();
+            }
+            return state;
+        }
+
         private boolean inThinking;
         private String pending = "";
         private final StringBuilder frameBuffer = new StringBuilder();

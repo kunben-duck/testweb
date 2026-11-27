@@ -16,6 +16,7 @@ import com.huawei.it.ex.one.application.service.runtime.DomainAgentBindingComman
 import com.huawei.it.ex.one.application.service.runtime.RuntimeBindingApplicationService;
 import com.huawei.it.ex.one.application.service.runtime.RuntimeBindingApplicationService.DeferredDomainAgentBindingActivation;
 import com.huawei.it.ex.one.application.service.runtime.RuntimeBindingResolution;
+import com.huawei.it.ex.one.application.service.workbench.WorkbenchTaskChatBinding;
 import com.huawei.it.ex.one.domain.auth.UserContext;
 import com.huawei.it.ex.one.domain.chat.AttachmentRef;
 import com.huawei.it.ex.one.domain.chat.ChatCommand;
@@ -44,6 +45,14 @@ final class RouteResolutionCoordinator {
     private final RuntimeBindingApplicationService runtimeBindingService;
     private final RouteSignalApplicationService routeSignalService;
     private final DocumentFacade documentFacade;
+    private WorkbenchTaskChatBinding workbenchTaskBinding;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setWorkbenchTaskBinding(WorkbenchTaskChatBinding workbenchTaskBinding) { this.workbenchTaskBinding = workbenchTaskBinding; }
+
+    boolean workbenchTaskConversation(UserContext user, String session) {
+        return workbenchTaskBinding != null && workbenchTaskBinding.target(user, session) != null;
+    }
 
     RouteResolutionCoordinator(RuntimeBindingApplicationService runtimeBindingService,
                                RouteSignalApplicationService routeSignalService,
@@ -56,6 +65,10 @@ final class RouteResolutionCoordinator {
     void prepareInitial(InitialRoutePreparation preparation) {
         // 显式目标优先；否则 forceReroute 清除续接资格，普通请求才尝试当前专家范围内的 ACTIVE Binding。
         ExplicitRuntimeTarget explicitTarget = preparation.explicitRuntimeTarget();
+        if (workbenchTaskBinding != null) {
+            String agent = workbenchTaskBinding.target(preparation.user(), preparation.session().id());
+            if (agent != null) explicitTarget = new ExplicitRuntimeTarget(ExplicitRuntimeTarget.Type.DOMAIN_AGENT, agent);
+        }
         if (explicitTarget != null && explicitTarget.domainAgent()) {
             prepareExplicitDomainAgent(preparation, explicitTarget);
             return;
